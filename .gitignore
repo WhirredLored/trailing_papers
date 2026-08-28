@@ -39,3 +39,9 @@ Thumbs.db
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# agent skills
+# .agents/ is the vendored skill source and IS committed, pinned by skills-lock.json.
+# .claude/skills/ holds per-machine symlinks into it with absolute paths baked in —
+# regenerate with `npx skills add supabase/agent-skills` after cloning.
+.claude/skills/
