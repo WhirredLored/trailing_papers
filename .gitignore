@@ -1,0 +1,41 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# next.js
+.next/
+out/
+build/
+next-env.d.ts
+
+# testing
+coverage/
+
+# secrets — .env.example is the only env file that belongs in git
+.env
+.env.*
+!.env.example
+
+# generated artifacts
+*.pdf
+/public/generated/
+/tmp/
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+
+# editors / os
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
