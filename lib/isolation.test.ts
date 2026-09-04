@@ -206,5 +206,53 @@ if (!SUPABASE_URL || !ANON_KEY || !SERVICE_KEY) {
       expect(error).toBeNull()
       expect(data).toHaveLength(0)
     })
+  
+  // ─── C04: client table ──────────────────────────────────────────────────────
+  test('client table — cross-tenant isolation > user A can read company A', async () => {
+    const { data, error } = await clientA.from('client').select('*')
+    expect(error).toBeNull()
+    expect(data?.length).toBeGreaterThan(0)
+    data!.forEach((row) => expect(row.company_id).toBe(companyAId))
   })
+
+  test('client table — cross-tenant isolation > user A cannot read company B', async () => {
+    const { data, error } = await clientA.from('client').select('*').eq('company_id', companyBId)
+    expect(error).toBeNull()
+    expect(data).toHaveLength(0) // RLS silently filters out rows belonging to companyB
+  })
+
+  test('client table — cross-tenant isolation > user B cannot read company A', async () => {
+    const { data, error } = await clientB.from('client').select('*').eq('company_id', companyAId)
+    expect(error).toBeNull()
+    expect(data).toHaveLength(0)
+  })
+
+  // ─── C04: property table ────────────────────────────────────────────────────
+  test('property table — cross-tenant isolation > user A can read company A', async () => {
+    const { data, error } = await clientA.from('property').select('*')
+    expect(error).toBeNull()
+    expect(data?.length).toBeGreaterThan(0)
+    data!.forEach((row) => expect(row.company_id).toBe(companyAId))
+  })
+
+  test('property table — cross-tenant isolation > user A cannot read company B', async () => {
+    const { data, error } = await clientA.from('property').select('*').eq('company_id', companyBId)
+    expect(error).toBeNull()
+    expect(data).toHaveLength(0)
+  })
+
+  // ─── C04: project table ─────────────────────────────────────────────────────
+  test('project table — cross-tenant isolation > user B can read company B', async () => {
+    const { data, error } = await clientB.from('project').select('*')
+    expect(error).toBeNull()
+    expect(data?.length).toBeGreaterThan(0)
+    data!.forEach((row) => expect(row.company_id).toBe(companyBId))
+  })
+
+  test('project table — cross-tenant isolation > user B cannot read company A', async () => {
+    const { data, error } = await clientB.from('project').select('*').eq('company_id', companyAId)
+    expect(error).toBeNull()
+    expect(data).toHaveLength(0)
+  })
+})
 }
