@@ -508,3 +508,58 @@ html {
   margin-bottom: 1rem;
   align-items: center;
 }
+
+/* ─── Catalog / Price Book ──────────────────────────────────────────────── */
+
+.catalog-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  margin-top: 1rem;
+}
+
+.catalog-table th {
+  background: #f8fafc;
+  border-bottom: 2px solid #e2e8f0;
+  padding: 0.625rem 0.75rem;
+  text-align: left;
+  font-weight: 600;
+  color: #475569;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  white-space: nowrap;
+}
+
+.catalog-table td {
+  border-bottom: 1px solid #f1f5f9;
+  padding: 0.5rem 0.75rem;
+  color: #1e293b;
+  vertical-align: middle;
+}
+
+.catalog-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.catalog-table code {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  font-size: 0.8125rem;
+  background: #f1f5f9;
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+  color: #334155;
+}
+
+.catalog-desc {
+  color: #94a3b8;
+  font-size: 0.8125rem;
+}
+
+.catalog-row-archived {
+  opacity: 0.5;
+}
+
+.catalog-row-archived td {
+  color: #94a3b8;
+}

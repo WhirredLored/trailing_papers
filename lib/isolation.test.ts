@@ -254,5 +254,25 @@ if (!SUPABASE_URL || !ANON_KEY || !SERVICE_KEY) {
     expect(error).toBeNull()
     expect(data).toHaveLength(0)
   })
+
+  // ─── C06: catalog_item table ──────────────────────────────────────────────
+  test('catalog_item table — cross-tenant isolation > user A can read company A', async () => {
+    const { data, error } = await clientA.from('catalog_item').select('*')
+    expect(error).toBeNull()
+    // May be empty if no seed data, but should not error
+    data?.forEach((row) => expect(row.company_id).toBe(companyAId))
+  })
+
+  test('catalog_item table — cross-tenant isolation > user A cannot read company B', async () => {
+    const { data, error } = await clientA.from('catalog_item').select('*').eq('company_id', companyBId)
+    expect(error).toBeNull()
+    expect(data).toHaveLength(0)
+  })
+
+  test('catalog_item table — cross-tenant isolation > user B cannot read company A', async () => {
+    const { data, error } = await clientB.from('catalog_item').select('*').eq('company_id', companyAId)
+    expect(error).toBeNull()
+    expect(data).toHaveLength(0)
+  })
 })
 }

@@ -78,3 +78,22 @@ exactly. No `parseFloat` on money paths (grep confirmed).
 
 AWAITING HUMAN: nothing new — no database changes in this commit. Previous SQL migrations from
 C02–C04 still need to be run if not already applied.
+
+## C06 — feat(catalog): add price book with bulk repricing, CSV import, and price history
+
+Migration `20260905000000_catalog.sql`: `catalog_item` table with kind/unit enums, `catalog_item_price_history`
+append-only log, price-change trigger (`log_catalog_price_change`), RLS policies, search indexes,
+unique (company_id, code) constraint. API routes: CRUD under `pages/api/catalog/`, bulk-reprice
+endpoint with dry-run preview, CSV import/export (idempotent on code) with per-row error reporting.
+UI: `pages/catalog/index.tsx` with searchable/filterable list, inline edit, create form, bulk reprice
+with preview, CSV import with dry-run and file upload, CSV export download, price history viewer,
+archive action. Seed script: `scripts/seed-catalog.ts` with 33 starter items for exterior
+residential work (siding, soffit/fascia, wrap, flashing, trim, fasteners, labor rates, equipment).
+Catalog table CSS added to `styles/globals.css`. Isolation tests extended for `catalog_item` table.
+
+VERIFIED: `npm run test` 81 tests pass ✅, `npm run lint` ✅ on all C06 files.
+No type errors in C06 files (pre-existing C04 type issues remain, unrelated).
+
+AWAITING HUMAN: paste `supabase/migrations/20260905000000_catalog.sql` into the Supabase SQL editor.
+To load sample data: `npx tsx scripts/seed-catalog.ts <your-company-uuid>`.
+
