@@ -61,3 +61,20 @@ VERIFIED: `npm run build` ✅, `npm run lint` ✅. (Tests will pass once SQL is 
 
 AWAITING HUMAN: paste `supabase/migrations/20260904000001_company_profile.sql` and `supabase/migrations/20260904000002_clients_properties_projects.sql` into the Supabase SQL editor!
 
+## C05 — feat(money): add integer-cents money utilities and pure totals engine
+
+`lib/money.ts` expanded from C01 placeholder to full integer-cents module: `parseCents` (string
+manipulation, not parseFloat), `formatCents`/`formatCentsPlain`, `addCents`/`subtractCents`/
+`multiplyCents`/`sumCents`, `applyPercent` (basis points), `percentOfCents`, `applyMarkup`,
+`applyMargin` (explicitly different operations). Single rounding function
+`roundHalfAwayFromZero` used everywhere. `lib/totals.ts`: pure function `computeTotals` taking
+line items + tax + discount + deposit terms, returning full breakdown with per-line taxability,
+pro-rata discount allocation, and deposit/balance. `lib/recompute.ts`: server-side
+`recomputeAndAssert` that rejects client-supplied totals not matching server computation (Law 4).
+
+VERIFIED: `npm run test` 81 tests pass (57 money, 18 totals, 4 recompute, 2 supabase-server) ✅,
+`npm run lint` ✅ on all C05 files. Golden-file 30-line siding job matches hand-computed totals
+exactly. No `parseFloat` on money paths (grep confirmed).
+
+AWAITING HUMAN: nothing new — no database changes in this commit. Previous SQL migrations from
+C02–C04 still need to be run if not already applied.
