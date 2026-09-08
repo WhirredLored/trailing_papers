@@ -4,8 +4,7 @@ package-lock.json
 
 # The prompt pack is verbatim source material — every C-file is copied into a session
 # exactly as written, and reflowing it would change the prompts. Never format these.
-C[0-9][0-9]_*.md
-MILESTONES.md
+prompts/
 
 # Vendored third-party skills — pinned by hash in skills-lock.json. Reformatting would
 # break the hash check and produce noise on every upstream update.

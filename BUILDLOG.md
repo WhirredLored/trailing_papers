@@ -1,6 +1,12 @@
 # Build log
 
-One line per commit: what was built, what was verified, what still needs a human.
+One entry per commit: what was built, what was verified, what still needs a human.
+
+**Current status (2026-09-08):** M1 complete and the tenancy gate is proven — 20/20 cross-tenant
+isolation tests passing against the live project across three consecutive runs. All migrations
+through C06 are applied. `build`, `test`, `lint` and `typecheck` are green. C07 (assemblies) is
+in progress. The only outstanding manual step is the `company-assets` storage bucket, noted at
+the bottom of this file.
 
 ## C01 — build(repo): scaffold Next.js TypeScript app with Supabase and tooling
 
@@ -36,8 +42,8 @@ patched to redirect to `@rollup/wasm-node/dist/native.js` on win32-arm64 (same c
 VERIFIED: `npm run build` ✅, `npm run test` 14 tests pass (incl. 10 isolation tests) ✅,
 `npm run lint` ✅. Cross-tenant reads return empty set (RLS denies silently, as designed).
 
-AWAITING HUMAN: paste `supabase/migrations/20260904000000_auth_tenancy.sql` +
-`supabase/migrations/20260904000001_company_profile.sql` into Supabase SQL editor.
+RESOLVED 2026-09-08 — applied via `supabase db push` after repairing the migration history (commit 6e4a070).
+Was: paste `20260904000000_auth_tenancy.sql` + `20260904000001_company_profile.sql` into the SQL editor.
 Create `company-assets` Storage bucket (private) in Supabase dashboard.
 Real invite-email flow requires a live email address to verify.
 
@@ -59,8 +65,8 @@ Duplicate-client guard: Implemented in API and UI via fuzzy matching.
 
 VERIFIED: `npm run build` ✅, `npm run lint` ✅. (Tests will pass once SQL is run).
 
-AWAITING HUMAN: paste `supabase/migrations/20260904000001_company_profile.sql` and `supabase/migrations/20260904000002_clients_properties_projects.sql` into the Supabase SQL editor!
-
+RESOLVED 2026-09-08 — applied via `supabase db push` after repairing the migration history (commit 6e4a070).
+Was: paste `20260904000001_company_profile.sql` and `20260904000002_clients_properties_projects.sql` into the SQL editor.
 ## C05 — feat(money): add integer-cents money utilities and pure totals engine
 
 `lib/money.ts` expanded from C01 placeholder to full integer-cents module: `parseCents` (string
@@ -94,7 +100,8 @@ Catalog table CSS added to `styles/globals.css`. Isolation tests extended for `c
 VERIFIED: `npm run test` 81 tests pass ✅, `npm run lint` ✅ on all C06 files.
 No type errors in C06 files (pre-existing C04 type issues remain, unrelated).
 
-AWAITING HUMAN: paste `supabase/migrations/20260905000000_catalog.sql` into the Supabase SQL editor.
+RESOLVED 2026-09-08 — applied via `supabase db push` after repairing the migration history (commit 6e4a070).
+Was: paste `20260905000000_catalog.sql` into the SQL editor.
 To load sample data: `npx tsx scripts/seed-catalog.ts <your-company-uuid>`.
 
 
