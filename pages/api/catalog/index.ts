@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { getServiceRoleClient } from '@/lib/supabase-server'
 import { requireUser } from '@/lib/auth-server'
+import type { Enums } from '@/types/db'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === 'GET') return getCatalogItems(req, res)
@@ -28,7 +29,7 @@ async function getCatalogItems(req: NextApiRequest, res: NextApiResponse) {
   }
 
   if (kind && typeof kind === 'string') {
-    query = query.eq('kind', kind)
+    query = query.eq('kind', kind as Enums<'catalog_item_kind'>)
   }
 
   // Default to active-only unless explicitly requesting all or inactive
@@ -63,7 +64,10 @@ async function createCatalogItem(req: NextApiRequest, res: NextApiResponse) {
     return res.status(400).json({ error: 'Code and name are required.' })
   }
 
-  if (unit_cost_cents !== undefined && (!Number.isInteger(unit_cost_cents) || unit_cost_cents < 0)) {
+  if (
+    unit_cost_cents !== undefined &&
+    (!Number.isInteger(unit_cost_cents) || unit_cost_cents < 0)
+  ) {
     return res.status(400).json({ error: 'unit_cost_cents must be a non-negative integer.' })
   }
 

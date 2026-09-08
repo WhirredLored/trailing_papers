@@ -22,7 +22,8 @@
  *   4. Assert A's client sees only A's rows; B's client sees nothing of A's (and vice versa).
  */
 
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import type { Database } from '@/types/supabase'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 // ─── env guards ──────────────────────────────────────────────────────────────
@@ -35,13 +36,13 @@ if (!SUPABASE_URL || !ANON_KEY || !SERVICE_KEY) {
   console.warn('[isolation.test] Skipping — Supabase env vars not set.')
 } else {
   // ─── clients ───────────────────────────────────────────────────────────────
-  const admin = createClient(SUPABASE_URL, SERVICE_KEY, {
+  const admin = createClient<Database>(SUPABASE_URL, SERVICE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
   })
 
   // Scoped clients for each test company; initialised in beforeAll.
-  let clientA: ReturnType<typeof createClient>
-  let clientB: ReturnType<typeof createClient>
+  let clientA: SupabaseClient<Database>
+  let clientB: SupabaseClient<Database>
 
   // ─── seed data ─────────────────────────────────────────────────────────────
   let companyAId: string
@@ -105,15 +106,59 @@ if (!SUPABASE_URL || !ANON_KEY || !SERVICE_KEY) {
       created_by: userBId,
     })
 
+    // ─── domain rows for BOTH companies ──────────────────────────────────────
+    // Both sides must hold rows. With only one side seeded, every "cannot read
+    // the other company" assertion passes against an empty table and proves
+    // nothing about RLS — it just proves the table is empty.
+    const seedCompany = async (companyId: string, userId: string, label: string) => {
+      const { data: cl, error: clErr } = await admin
+        .from('client')
+        .insert({ company_id: companyId, name: `Isolation ${label} Client`, created_by: userId })
+        .select('id')
+        .single()
+      expect(clErr, `${label} client insert: ${clErr?.message}`).toBeNull()
+
+      const { data: pr, error: prErr } = await admin
+        .from('property')
+        .insert({
+          company_id: companyId,
+          client_id: cl!.id,
+          address_line1: `1 Isolation Way (${label})`,
+          created_by: userId,
+        })
+        .select('id')
+        .single()
+      expect(prErr, `${label} property insert: ${prErr?.message}`).toBeNull()
+
+      const { error: pjErr } = await admin.from('project').insert({
+        company_id: companyId,
+        property_id: pr!.id,
+        title: `Isolation ${label} Project`,
+        created_by: userId,
+      })
+      expect(pjErr, `${label} project insert: ${pjErr?.message}`).toBeNull()
+
+      const { error: ciErr } = await admin.from('catalog_item').insert({
+        company_id: companyId,
+        code: `ISO-${label}-001`,
+        name: `Isolation ${label} Catalog Item`,
+        created_by: userId,
+      })
+      expect(ciErr, `${label} catalog_item insert: ${ciErr?.message}`).toBeNull()
+    }
+
+    await seedCompany(companyAId, userAId, 'A')
+    await seedCompany(companyBId, userBId, 'B')
+
     // Sign in as A and B to get real scoped sessions
-    clientA = createClient(SUPABASE_URL, ANON_KEY)
+    clientA = createClient<Database>(SUPABASE_URL, ANON_KEY)
     const { error: signInAErr } = await clientA.auth.signInWithPassword({
       email: EMAIL_A,
       password: PASSWORD,
     })
     expect(signInAErr, `sign in A: ${signInAErr?.message}`).toBeNull()
 
-    clientB = createClient(SUPABASE_URL, ANON_KEY)
+    clientB = createClient<Database>(SUPABASE_URL, ANON_KEY)
     const { error: signInBErr } = await clientB.auth.signInWithPassword({
       email: EMAIL_B,
       password: PASSWORD,
@@ -122,7 +167,16 @@ if (!SUPABASE_URL || !ANON_KEY || !SERVICE_KEY) {
   })
 
   afterAll(async () => {
-    // Clean up — delete users and companies (cascade deletes app_user rows)
+    // Delete in FK order. company_id references are `on delete restrict`, and
+    // created_by references auth.users, so domain rows must go before the users
+    // and companies or both deletes fail silently and leak test data.
+    for (const companyId of [companyAId, companyBId]) {
+      if (!companyId) continue
+      await admin.from('catalog_item').delete().eq('company_id', companyId)
+      await admin.from('project').delete().eq('company_id', companyId)
+      await admin.from('property').delete().eq('company_id', companyId)
+      await admin.from('client').delete().eq('company_id', companyId)
+    }
     if (userAId) await admin.auth.admin.deleteUser(userAId)
     if (userBId) await admin.auth.admin.deleteUser(userBId)
     if (companyAId) await admin.from('company').delete().eq('id', companyAId)
@@ -135,7 +189,7 @@ if (!SUPABASE_URL || !ANON_KEY || !SERVICE_KEY) {
       const { data, error } = await clientA.from('company').select('id').eq('id', companyAId)
       expect(error).toBeNull()
       expect(data).toHaveLength(1)
-      expect(data![0].id).toBe(companyAId)
+      expect(data?.[0]?.id).toBe(companyAId)
     })
 
     it('user A cannot read company B', async () => {
@@ -149,7 +203,7 @@ if (!SUPABASE_URL || !ANON_KEY || !SERVICE_KEY) {
       const { data, error } = await clientB.from('company').select('id').eq('id', companyBId)
       expect(error).toBeNull()
       expect(data).toHaveLength(1)
-      expect(data![0].id).toBe(companyBId)
+      expect(data?.[0]?.id).toBe(companyBId)
     })
 
     it('user B cannot read company A', async () => {
@@ -206,73 +260,90 @@ if (!SUPABASE_URL || !ANON_KEY || !SERVICE_KEY) {
       expect(error).toBeNull()
       expect(data).toHaveLength(0)
     })
-  
+  })
+
   // ─── C04: client table ──────────────────────────────────────────────────────
-  test('client table — cross-tenant isolation > user A can read company A', async () => {
-    const { data, error } = await clientA.from('client').select('*')
-    expect(error).toBeNull()
-    expect(data?.length).toBeGreaterThan(0)
-    data!.forEach((row) => expect(row.company_id).toBe(companyAId))
-  })
+  describe('client table — cross-tenant isolation', () => {
+    it('user A can read company A', async () => {
+      const { data, error } = await clientA.from('client').select('*')
+      expect(error).toBeNull()
+      expect(data?.length).toBeGreaterThan(0)
+      data!.forEach((row) => expect(row.company_id).toBe(companyAId))
+    })
 
-  test('client table — cross-tenant isolation > user A cannot read company B', async () => {
-    const { data, error } = await clientA.from('client').select('*').eq('company_id', companyBId)
-    expect(error).toBeNull()
-    expect(data).toHaveLength(0) // RLS silently filters out rows belonging to companyB
-  })
+    it('user A cannot read company B', async () => {
+      const { data, error } = await clientA.from('client').select('*').eq('company_id', companyBId)
+      expect(error).toBeNull()
+      expect(data).toHaveLength(0) // RLS silently filters out rows belonging to companyB
+    })
 
-  test('client table — cross-tenant isolation > user B cannot read company A', async () => {
-    const { data, error } = await clientB.from('client').select('*').eq('company_id', companyAId)
-    expect(error).toBeNull()
-    expect(data).toHaveLength(0)
+    it('user B cannot read company A', async () => {
+      const { data, error } = await clientB.from('client').select('*').eq('company_id', companyAId)
+      expect(error).toBeNull()
+      expect(data).toHaveLength(0)
+    })
   })
 
   // ─── C04: property table ────────────────────────────────────────────────────
-  test('property table — cross-tenant isolation > user A can read company A', async () => {
-    const { data, error } = await clientA.from('property').select('*')
-    expect(error).toBeNull()
-    expect(data?.length).toBeGreaterThan(0)
-    data!.forEach((row) => expect(row.company_id).toBe(companyAId))
-  })
+  describe('property table — cross-tenant isolation', () => {
+    it('user A can read company A', async () => {
+      const { data, error } = await clientA.from('property').select('*')
+      expect(error).toBeNull()
+      expect(data?.length).toBeGreaterThan(0)
+      data!.forEach((row) => expect(row.company_id).toBe(companyAId))
+    })
 
-  test('property table — cross-tenant isolation > user A cannot read company B', async () => {
-    const { data, error } = await clientA.from('property').select('*').eq('company_id', companyBId)
-    expect(error).toBeNull()
-    expect(data).toHaveLength(0)
+    it('user A cannot read company B', async () => {
+      const { data, error } = await clientA
+        .from('property')
+        .select('*')
+        .eq('company_id', companyBId)
+      expect(error).toBeNull()
+      expect(data).toHaveLength(0)
+    })
   })
 
   // ─── C04: project table ─────────────────────────────────────────────────────
-  test('project table — cross-tenant isolation > user B can read company B', async () => {
-    const { data, error } = await clientB.from('project').select('*')
-    expect(error).toBeNull()
-    expect(data?.length).toBeGreaterThan(0)
-    data!.forEach((row) => expect(row.company_id).toBe(companyBId))
+  describe('project table — cross-tenant isolation', () => {
+    it('user B can read company B', async () => {
+      const { data, error } = await clientB.from('project').select('*')
+      expect(error).toBeNull()
+      expect(data?.length).toBeGreaterThan(0)
+      data!.forEach((row) => expect(row.company_id).toBe(companyBId))
+    })
+
+    it('user B cannot read company A', async () => {
+      const { data, error } = await clientB.from('project').select('*').eq('company_id', companyAId)
+      expect(error).toBeNull()
+      expect(data).toHaveLength(0)
+    })
   })
 
-  test('project table — cross-tenant isolation > user B cannot read company A', async () => {
-    const { data, error } = await clientB.from('project').select('*').eq('company_id', companyAId)
-    expect(error).toBeNull()
-    expect(data).toHaveLength(0)
-  })
+  // ─── C06: catalog_item table ────────────────────────────────────────────────
+  describe('catalog_item table — cross-tenant isolation', () => {
+    it('user A can read company A', async () => {
+      const { data, error } = await clientA.from('catalog_item').select('*')
+      expect(error).toBeNull()
+      expect(data?.length).toBeGreaterThan(0)
+      data!.forEach((row) => expect(row.company_id).toBe(companyAId))
+    })
 
-  // ─── C06: catalog_item table ──────────────────────────────────────────────
-  test('catalog_item table — cross-tenant isolation > user A can read company A', async () => {
-    const { data, error } = await clientA.from('catalog_item').select('*')
-    expect(error).toBeNull()
-    // May be empty if no seed data, but should not error
-    data?.forEach((row) => expect(row.company_id).toBe(companyAId))
-  })
+    it('user A cannot read company B', async () => {
+      const { data, error } = await clientA
+        .from('catalog_item')
+        .select('*')
+        .eq('company_id', companyBId)
+      expect(error).toBeNull()
+      expect(data).toHaveLength(0)
+    })
 
-  test('catalog_item table — cross-tenant isolation > user A cannot read company B', async () => {
-    const { data, error } = await clientA.from('catalog_item').select('*').eq('company_id', companyBId)
-    expect(error).toBeNull()
-    expect(data).toHaveLength(0)
+    it('user B cannot read company A', async () => {
+      const { data, error } = await clientB
+        .from('catalog_item')
+        .select('*')
+        .eq('company_id', companyAId)
+      expect(error).toBeNull()
+      expect(data).toHaveLength(0)
+    })
   })
-
-  test('catalog_item table — cross-tenant isolation > user B cannot read company A', async () => {
-    const { data, error } = await clientB.from('catalog_item').select('*').eq('company_id', companyAId)
-    expect(error).toBeNull()
-    expect(data).toHaveLength(0)
-  })
-})
 }

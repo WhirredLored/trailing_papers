@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { getServiceRoleClient } from '@/lib/supabase-server'
 import { requireUser } from '@/lib/auth-server'
+import type { Enums, Insert } from '@/types/db'
 
 /**
  * CSV Import/Export for Catalog Items
@@ -47,7 +48,9 @@ async function exportCsv(req: NextApiRequest, res: NextApiResponse) {
 
   const { data, error } = await getServiceRoleClient()
     .from('catalog_item')
-    .select('code, name, description, kind, unit, unit_cost_cents, default_markup_bp, taxable, notes')
+    .select(
+      'code, name, description, kind, unit, unit_cost_cents, default_markup_bp, taxable, notes',
+    )
     .eq('company_id', caller.companyId)
     .eq('active', true)
     .is('deleted_at', null)
@@ -118,7 +121,8 @@ async function importCsv(req: NextApiRequest, res: NextApiResponse) {
     code: string
     action: 'create' | 'update'
     errors: string[]
-    data: Record<string, unknown>
+    // company_id and created_by are supplied at insert time, not parsed from the CSV.
+    data: Omit<Insert<'catalog_item'>, 'company_id' | 'created_by'>
   }
 
   const results: RowResult[] = []
@@ -179,8 +183,10 @@ async function importCsv(req: NextApiRequest, res: NextApiResponse) {
         code,
         name,
         description: row['description'] || null,
-        kind,
-        unit,
+        // Validated against VALID_KINDS/VALID_UNITS above; rows with errors never
+        // reach the insert because hasErrors short-circuits first.
+        kind: kind as Enums<'catalog_item_kind'>,
+        unit: unit as Enums<'catalog_item_unit'>,
         unit_cost_cents: unitCostCents,
         default_markup_bp: defaultMarkupBp,
         taxable,
@@ -223,6 +229,10 @@ async function importCsv(req: NextApiRequest, res: NextApiResponse) {
       }
     } else {
       const existingId = existingByCode.get(r.code)
+      if (!existingId) {
+        importErrors.push({ row: r.row, code: r.code, error: 'Existing row not found.' })
+        continue
+      }
       const { error: updateError } = await client
         .from('catalog_item')
         .update(r.data)

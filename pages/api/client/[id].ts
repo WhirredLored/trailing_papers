@@ -1,6 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { getServiceRoleClient } from '@/lib/supabase-server'
 import { requireUser } from '@/lib/auth-server'
+import { routeParam } from '@/lib/api-params'
+import type { Update } from '@/types/db'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === 'GET') return getClient(req, res)
@@ -13,7 +15,8 @@ async function getClient(req: NextApiRequest, res: NextApiResponse) {
   const caller = await requireUser(req, res)
   if (!caller) return
 
-  const { id } = req.query
+  const id = routeParam(req, 'id')
+  if (!id) return res.status(400).json({ error: 'Missing id.' })
   const { data, error } = await getServiceRoleClient()
     .from('client')
     .select('*')
@@ -28,17 +31,24 @@ async function getClient(req: NextApiRequest, res: NextApiResponse) {
 }
 
 const PATCHABLE = new Set([
-  'name', 'company_name', 'emails', 'phones', 'billing_address', 'notes', 'referral_source'
+  'name',
+  'company_name',
+  'emails',
+  'phones',
+  'billing_address',
+  'notes',
+  'referral_source',
 ])
 
 async function updateClient(req: NextApiRequest, res: NextApiResponse) {
   const caller = await requireUser(req, res)
   if (!caller) return
 
-  const { id } = req.query
-  const patch: Record<string, unknown> = {}
+  const id = routeParam(req, 'id')
+  if (!id) return res.status(400).json({ error: 'Missing id.' })
+  const patch: Update<'client'> = {}
   for (const [k, v] of Object.entries(req.body)) {
-    if (PATCHABLE.has(k)) patch[k] = v
+    if (PATCHABLE.has(k)) (patch as Record<string, unknown>)[k] = v
   }
 
   if (Object.keys(patch).length === 0) return res.status(400).json({ error: 'No changes.' })
@@ -60,7 +70,8 @@ async function deleteClient(req: NextApiRequest, res: NextApiResponse) {
   const caller = await requireUser(req, res)
   if (!caller) return
 
-  const { id } = req.query
+  const id = routeParam(req, 'id')
+  if (!id) return res.status(400).json({ error: 'Missing id.' })
   const { error } = await getServiceRoleClient()
     .from('client')
     .update({ deleted_at: new Date().toISOString(), deleted_by: caller.id })

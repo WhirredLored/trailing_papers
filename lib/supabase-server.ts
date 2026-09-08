@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import type { Database } from '@/types/supabase'
 
 /**
  * Server-only Supabase client. Carries the SERVICE ROLE key, which BYPASSES Row Level
@@ -17,7 +18,7 @@ if (typeof window !== 'undefined') {
   )
 }
 
-let cached: SupabaseClient | undefined
+let cached: SupabaseClient<Database> | undefined
 
 function requireEnv(name: string, value: string | undefined): string {
   if (!value) {
@@ -26,9 +27,9 @@ function requireEnv(name: string, value: string | undefined): string {
   return value
 }
 
-export function getServiceRoleClient(): SupabaseClient {
+export function getServiceRoleClient(): SupabaseClient<Database> {
   if (!cached) {
-    cached = createClient(
+    cached = createClient<Database>(
       requireEnv('NEXT_PUBLIC_SUPABASE_URL', process.env.NEXT_PUBLIC_SUPABASE_URL),
       requireEnv('SUPABASE_SERVICE_ROLE_KEY', process.env.SUPABASE_SERVICE_ROLE_KEY),
       { auth: { persistSession: false, autoRefreshToken: false } },

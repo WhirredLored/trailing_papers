@@ -97,3 +97,30 @@ No type errors in C06 files (pre-existing C04 type issues remain, unrelated).
 AWAITING HUMAN: paste `supabase/migrations/20260905000000_catalog.sql` into the Supabase SQL editor.
 To load sample data: `npx tsx scripts/seed-catalog.ts <your-company-uuid>`.
 
+
+## fix — tenancy gate repair and database typing
+
+The M1 cross-tenant isolation suite had not executed since C04. `lib/isolation.test.ts`
+appended its C04/C06 cases inside an unclosed `describe` block using bare `test()`, which
+is undefined without `globals: true` — a collection-time ReferenceError that killed all 20
+cases in the file, including C02's previously-passing proofs. `npm run test` still reported
+"143 passed", so the gap was invisible.
+
+Repaired the structure (7 describes, 20 `it()`), then found the C04/C06 tables were absent
+from the live project entirely: only C02's migration had ever been applied. Linked the CLI,
+repaired the migration history (C02 was applied by hand and unrecorded), and pushed C03,
+C04 and C06. Seeded client/property/project/catalog_item for BOTH companies — without rows
+on the far side, every "cannot read the other tenant" assertion passed vacuously.
+
+Also replaced the C01 placeholder in types/supabase.ts with generated types, which is what
+had been masking 43 type errors in committed code and breaking `next build` since C04.
+
+VERIFIED: isolation suite 20/20 across three consecutive runs against the live project.
+Full suite 101/101 with C07 held aside. `npm run build`, `npm run lint`, `npm run typecheck`
+all green. Teardown confirmed leaving zero rows and zero auth users behind.
+
+AWAITING HUMAN: the `company-assets` storage bucket (private) still must be created in the
+Supabase dashboard — C03's migration defines its policies but buckets are not SQL-managed.
+
+NOTE: C07 (assemblies) remains uncommitted and does not typecheck; it was held aside for
+these checks and is untouched.

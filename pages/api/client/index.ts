@@ -49,15 +49,16 @@ async function createClient(req: NextApiRequest, res: NextApiResponse) {
       .is('deleted_at', null)
       .ilike('name', `%${name}%`)
       .limit(1)
-    
+
     // In a real app we might prompt the user, but for the API, if duplicate guard is strict:
     // If the frontend sets a ?force=true, we might bypass. We'll let the frontend handle the prompt by checking before calling POST, or by handling a 409.
     // For now, let's just create it, but we can do a duplicate check route or just return a warning if not forced.
-    if (existing && existing.length > 0 && req.query.force !== 'true') {
-      return res.status(409).json({ 
-        error: 'Duplicate client detected.', 
-        existingId: existing[0].id,
-        existingName: existing[0].name
+    const duplicate = existing?.[0]
+    if (duplicate && req.query.force !== 'true') {
+      return res.status(409).json({
+        error: 'Duplicate client detected.',
+        existingId: duplicate.id,
+        existingName: duplicate.name,
       })
     }
   }
@@ -73,7 +74,7 @@ async function createClient(req: NextApiRequest, res: NextApiResponse) {
       billing_address: billing_address || null,
       notes: notes || null,
       referral_source: referral_source || null,
-      created_by: caller.id
+      created_by: caller.id,
     })
     .select('id')
     .single()
