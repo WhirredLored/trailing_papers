@@ -563,3 +563,224 @@ html {
 .catalog-row-archived td {
   color: #94a3b8;
 }
+
+/* ── C07: measurement input and takeoff preview ──────────────────────────── */
+
+.measure-panel {
+  display: block;
+}
+
+.measure-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  margin-top: 0.75rem;
+}
+.measure-table th {
+  background: #f8fafc;
+  border-bottom: 2px solid #e2e8f0;
+  padding: 0.5rem 0.625rem;
+  text-align: left;
+  font-weight: 600;
+  color: #475569;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  white-space: nowrap;
+}
+.measure-table td {
+  border-bottom: 1px solid #f1f5f9;
+  padding: 0.375rem 0.625rem;
+  color: #1e293b;
+  vertical-align: middle;
+}
+.measure-table .measure-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: #475569;
+}
+
+/* An unparseable dimension is flagged inline rather than blocking the keystroke. */
+.field-input--bad {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.measure-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  margin: 1.25rem 0 0;
+  padding: 0.75rem 0 0;
+  border-top: 1px solid #e2e8f0;
+}
+.measure-totals div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+.measure-totals dt {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  color: #64748b;
+}
+.measure-totals dd {
+  margin: 0;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+  color: #0f172a;
+}
+
+.measure-driver {
+  margin: 1rem 0 0;
+  padding: 0.625rem 0.75rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.375rem;
+  font-size: 0.9rem;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+}
+
+.takeoff-list {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+}
+.takeoff-row {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+.takeoff-row-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: baseline;
+}
+.takeoff-name {
+  font-weight: 600;
+  color: #0f172a;
+  font-size: 0.9rem;
+}
+.takeoff-cost {
+  font-variant-numeric: tabular-nums;
+  color: #0f172a;
+  white-space: nowrap;
+}
+.takeoff-buy {
+  font-size: 0.85rem;
+  color: #475569;
+  margin-top: 0.125rem;
+}
+/* The derivation is the point of the feature, so it is always visible, never a tooltip. */
+.takeoff-derivation {
+  margin-top: 0.375rem;
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  font-size: 0.78rem;
+  color: #64748b;
+  background: #f8fafc;
+  border-left: 2px solid #e2e8f0;
+  padding: 0.3rem 0.5rem;
+  border-radius: 0.25rem;
+  overflow-x: auto;
+}
+.takeoff-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 2px solid #e2e8f0;
+  font-size: 1rem;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── C07: assembly list ──────────────────────────────────────────────────── */
+
+.crm-empty {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: #64748b;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 0.5rem;
+  margin-top: 1rem;
+}
+
+.assembly-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.assembly-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  background: #fff;
+}
+
+.assembly-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+.assembly-card-title {
+  font-weight: 600;
+  color: #0f172a;
+  text-decoration: none;
+  font-size: 0.95rem;
+}
+.assembly-card-title:hover {
+  color: #4f46e5;
+  text-decoration: underline;
+}
+.assembly-card-driver {
+  font-size: 0.75rem;
+  color: #475569;
+  background: #f1f5f9;
+  border-radius: 999px;
+  padding: 0.125rem 0.5rem;
+  white-space: nowrap;
+}
+.assembly-card-desc {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #64748b;
+}
+.assembly-card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  font-size: 0.8rem;
+  color: #64748b;
+  margin-top: auto;
+}
+.assembly-card-items {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  font-size: 0.75rem;
+  color: #475569;
+}
+.assembly-card-actions {
+  display: flex;
+  gap: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #f1f5f9;
+}
+
+.btn-sm {
+  padding: 0.3rem 0.625rem;
+  font-size: 0.8rem;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}

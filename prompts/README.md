@@ -16,8 +16,8 @@ before anything is built on top of it.
 | C04 | Clients, properties, projects | shipped |
 | C05 | Integer-cents money utilities and totals engine | shipped |
 | C06 | Catalog price book, bulk repricing, CSV import, price history | shipped |
-| C07 | Assemblies with waste, packaging, auditable takeoff math | in progress |
-| C08 | Versioned estimate builder, immutable issued versions | planned |
+| C07 | Assemblies with waste, packaging, auditable takeoff math | shipped |
+| C08 | Versioned estimate builder, immutable issued versions | next |
 | C09 | Server-side PDF document generation | planned |
 | C10 | Tokenised client share links with access logging | planned |
 | C11 | ESIGN/UETA e-signature with audit certificate | planned |

@@ -131,3 +131,31 @@ Supabase dashboard — C03's migration defines its policies but buckets are not 
 
 NOTE: C07 (assemblies) remains uncommitted and does not typecheck; it was held aside for
 these checks and is untouched.
+
+## C07 — feat(estimating): add assemblies with waste, packaging, and auditable takeoff math
+
+Assembly and assembly_component tables following the C02 tenancy template, with driver-unit
+and rounding-rule enums. Pure takeoff engine in lib/takeoff.ts producing raw, waste-adjusted
+and purchase quantities plus a derivation string per component. Feet-inches parser and net-area
+maths in lib/dimensions.ts. Measurement UI (surfaces, openings, live driver total, feet-inches
+or decimal input) and an assembly detail page whose takeoff preview recomputes as waste factors
+and rounding rules are edited. Six sample assemblies covering demo, water barrier, backerboard,
+J-channel, siding and trim, seeded by scripts/seed-assemblies.ts.
+
+Two real defects were found and fixed rather than papered over. The derivation string rendered
+"x 0.01" where the spec's worked example requires "/ 100" — the division branch was unreachable
+because it was guarded by quantityPerDriver >= 1, and a "per 100 sq ft" rate is 0.01. And the
+assemblies list page referenced eleven CSS classes that had never been written, so it had been
+rendering unstyled.
+
+VERIFIED: the spec acceptance case run end to end against the live project — a 40ft x 10ft wall
+with two 3x5 windows (370 sq ft net) through the seeded siding assembly produces 5 squares,
+50 lin ft of starter, 1 box of nails, 9 lead hours and 7 helper hours, totalling $1,387.45,
+matching the hand-computed takeoff with a derivation on every line. Migration applied via
+supabase db push; types regenerated. Seed script re-run after refactoring: 6 assemblies,
+21 components, cleanup left zero rows. 187 tests across 8 files. build, lint and typecheck green.
+
+AWAITING HUMAN: the assemblies and measurement UI has not been exercised in a browser against a
+real session — the pages compile and the maths underneath them is tested end to end, but no one
+has typed a dimension into the field on a real device. The `company-assets` storage bucket from
+C03 also remains outstanding.

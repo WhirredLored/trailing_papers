@@ -83,6 +83,129 @@ export type Database = {
           },
         ]
       }
+      assembly: {
+        Row: {
+          active: boolean
+          company_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          deleted_by: string | null
+          description: string | null
+          driver_unit: Database["public"]["Enums"]["assembly_driver_unit"]
+          id: string
+          name: string
+          notes: string | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          description?: string | null
+          driver_unit?: Database["public"]["Enums"]["assembly_driver_unit"]
+          id?: string
+          name: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          description?: string | null
+          driver_unit?: Database["public"]["Enums"]["assembly_driver_unit"]
+          id?: string
+          name?: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assembly_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "company"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      assembly_component: {
+        Row: {
+          assembly_id: string
+          catalog_item_id: string
+          company_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          notes: string | null
+          package_size: number
+          quantity_per_driver: number
+          rounding_rule: Database["public"]["Enums"]["rounding_rule"]
+          sort_order: number
+          updated_at: string
+          waste_percent_bp: number
+        }
+        Insert: {
+          assembly_id: string
+          catalog_item_id: string
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          package_size?: number
+          quantity_per_driver: number
+          rounding_rule?: Database["public"]["Enums"]["rounding_rule"]
+          sort_order?: number
+          updated_at?: string
+          waste_percent_bp?: number
+        }
+        Update: {
+          assembly_id?: string
+          catalog_item_id?: string
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          package_size?: number
+          quantity_per_driver?: number
+          rounding_rule?: Database["public"]["Enums"]["rounding_rule"]
+          sort_order?: number
+          updated_at?: string
+          waste_percent_bp?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assembly_component_assembly_id_fkey"
+            columns: ["assembly_id"]
+            isOneToOne: false
+            referencedRelation: "assembly"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assembly_component_catalog_item_id_fkey"
+            columns: ["catalog_item_id"]
+            isOneToOne: false
+            referencedRelation: "catalog_item"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assembly_component_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "company"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       catalog_item: {
         Row: {
           active: boolean
@@ -582,6 +705,7 @@ export type Database = {
       auth_user_role: { Args: never; Returns: string }
     }
     Enums: {
+      assembly_driver_unit: "sq_ft" | "lin_ft" | "ea" | "sq" | "opening"
       catalog_item_kind:
         | "labor"
         | "material"
@@ -605,6 +729,7 @@ export type Database = {
         | "complete"
         | "closed"
         | "lost"
+      rounding_rule: "exact" | "up_to_unit" | "up_to_package"
       user_role: "owner" | "admin" | "crew"
     }
     CompositeTypes: {
@@ -736,6 +861,7 @@ export const Constants = {
   },
   public: {
     Enums: {
+      assembly_driver_unit: ["sq_ft", "lin_ft", "ea", "sq", "opening"],
       catalog_item_kind: [
         "labor",
         "material",
@@ -754,6 +880,7 @@ export const Constants = {
         "closed",
         "lost",
       ],
+      rounding_rule: ["exact", "up_to_unit", "up_to_package"],
       user_role: ["owner", "admin", "crew"],
     },
   },
