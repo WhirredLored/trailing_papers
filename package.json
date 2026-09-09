@@ -16,7 +16,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:isolation": "vitest run lib/isolation.test.ts"
+    "test:isolation": "vitest run lib/isolation.test.ts",
+    "test:estimates": "vitest run lib/estimate-db.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.58.0",

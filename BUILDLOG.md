@@ -211,7 +211,65 @@ writing that test now would have leaked rows into the project on every run. The 
 triggers and the revision flow are implemented and typecheck, but no one has watched the
 database refuse an edit. That test is the first thing C09 should do after the push.
 
+RESOLVED 2026-09-08 — migration applied with `supabase db push`, types regenerated (no diff:
+the migration only replaces two function bodies), and the acceptance case is now proven by
+`lib/estimate-db.test.ts`. See the follow-up entry below.
+
 Also unverified: the builder has not been exercised in a browser against a real session.
 The pages compile and the money underneath them is tested, but nobody has dragged a line or
 issued an estimate on a real device. The `company-assets` storage bucket from C03 remains
 outstanding.
+
+## C08 follow-up — the acceptance case, proven
+
+`20260908000002_estimate_retire_before_purge.sql` applied; all eight migrations now report
+local and remote in sync. `lib/estimate-db.test.ts` is the C08 acceptance case, run against
+the live project through the SERVICE-ROLE client — which bypasses RLS entirely, so what
+refuses these writes is the trigger and nothing else. `npm run test:estimates` runs it alone.
+
+VERIFIED, 20 cases, all observed passing:
+  - Issuing froze the expected totals onto the row ($1,335.00 subtotal, $65.63 tax on the one
+    taxable line, $1,400.63 total, $1,005.00 cost, $330.00 margin).
+  - An issued estimate refuses: a change to its notes, a change to its total, adding a line,
+    editing a line, deleting a line, deleting the estimate, a status flip back to draft, and
+    a save through `save_estimate_draft`. It still allows issued → approved.
+  - A draft refuses a hand-written `status = 'issued'` that bypasses `issue_estimate()`, and
+    stays editable afterwards.
+  - The revision flow: v1 clones to a v2 draft with its lines copied; v1 stays `approved`
+    with a null supersede pointer while v2 is still a draft; asking for a revision twice
+    returns the same v2 (idempotent); revising a draft is refused; revising with the wrong
+    company id is refused; v2 is editable and re-prices; issuing v2 flips v1 to `superseded`
+    with `superseded_by_estimate_id` set, and v1 keeps its own frozen totals; issuing v2 a
+    second time changes nothing (idempotent).
+  - Retire before purge: deleting an issued estimate is refused, setting `deleted_at` then
+    deleting succeeds, and the lines go with it.
+
+Teardown verified: zero rows in every domain table and zero auth users afterwards, across two
+consecutive full-suite runs.
+
+Hook timeouts cost two rounds of leaked fixtures and are worth recording. The new suite's first
+run timed out in `beforeAll` at vitest's 10s default — an auth user plus six domain rows and an
+issue round-trip does not fit — and left a company, a draft estimate, two lines, two projects, a
+property, a client and an auth user behind in the live project. Then the C08 rows I added to
+`isolation.test.ts`'s seed pushed THAT suite over the same 10s ceiling, in both `beforeAll` and
+`afterAll`, leaking two more companies: a regression I introduced with the tenancy cases and did
+not catch, because the suite had passed comfortably before the two extra inserts per tenant. Both
+leaks were purged by hand and verified gone. The fix is `hookTimeout: 60_000` in
+`vitest.config.ts` rather than per-file arguments, so every future live-project suite inherits it.
+The lesson is the one worth keeping: a hook that times out mid-seed does not clean up after
+itself, so the ceiling has to be generous enough that it never trips.
+
+Full suite 235 tests across 10 files (was 215 across 9). build, lint and typecheck green.
+
+NOTE — `npm run build` is intermittently failing on this machine, and my earlier claim in this
+session that it "no longer reproduces" was wrong. It failed three times, passed after
+`rm -rf .next`, then failed three more times later, and has since passed eleven consecutive
+runs including after regenerating types, touching files and adding and removing files. The
+stack is inside webpack's own filesystem snapshot code — `FileSystemInfo` hashing a directory
+entry whose `hash` is undefined — not in application code, and the same tree builds clean
+repeatedly. Clearing `.next` resolves it every time. I could not find a deterministic trigger,
+so nothing was changed to work around it; if it recurs, `rm -rf .next` is the fix.
+
+AWAITING HUMAN: the builder still has not been exercised in a browser against a real session —
+nobody has dragged a line, run a takeoff into an estimate, or issued one on a real device. The
+`company-assets` storage bucket from C03 also remains outstanding.
