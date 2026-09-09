@@ -3,7 +3,13 @@ import Head from 'next/head'
 import { useRouter } from 'next/router'
 import Link from 'next/link'
 import { getBrowserClient } from '@/lib/supabase-browser'
+import { formatCents } from '@/lib/money'
 import type { Tables } from '@/types/db'
+
+type EstimateSummary = Pick<
+  Tables<'estimate'>,
+  'id' | 'version' | 'status' | 'total_cents' | 'issued_at'
+>
 
 // Mirrors the API's select: '*, property(address_line1, client(name))'
 type ProjectDetail = Tables<'project'> & {
@@ -134,11 +140,7 @@ export default function ProjectDetailPage() {
             </div>
           )}
 
-          {activeTab === 'estimate' && (
-            <div className="settings-section">
-              <p className="field-hint">Estimates tab (stubbed for future commit)</p>
-            </div>
-          )}
+          {activeTab === 'estimate' && <EstimatesTab projectId={project.id} />}
 
           {activeTab === 'photos' && (
             <div className="settings-section">
@@ -154,5 +156,110 @@ export default function ProjectDetailPage() {
         </div>
       </main>
     </>
+  )
+}
+
+/**
+ * Every version of the estimate for this project, newest first. Superseded
+ * versions stay listed — the evidence chain is the point, so nothing that was
+ * ever put in front of a client disappears from the record.
+ */
+function EstimatesTab({ projectId }: { projectId: string }) {
+  const [estimates, setEstimates] = useState<EstimateSummary[]>([])
+  const [loading, setLoading] = useState(true)
+  const [creating, setCreating] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const router = useRouter()
+
+  const fetchEstimates = useCallback(async () => {
+    const supabase = getBrowserClient()
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    if (!session) return
+
+    const res = await fetch(`/api/estimate?project_id=${projectId}`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    })
+    if (res.ok) setEstimates((await res.json()) as EstimateSummary[])
+    setLoading(false)
+  }, [projectId])
+
+  useEffect(() => {
+    fetchEstimates()
+  }, [fetchEstimates])
+
+  const createEstimate = async () => {
+    setCreating(true)
+    setError(null)
+
+    const supabase = getBrowserClient()
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    if (!session) {
+      setError('Your session expired. Sign in again.')
+      setCreating(false)
+      return
+    }
+
+    const res = await fetch('/api/estimate', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ project_id: projectId }),
+    })
+    const body = await res.json().catch(() => ({ error: 'Could not start an estimate.' }))
+    setCreating(false)
+
+    if (res.ok) {
+      router.push(`/estimates/${body.id}`)
+      return
+    }
+    // A project holds one open draft at a time; the API points at it.
+    if (res.status === 409 && body.estimate_id) {
+      router.push(`/estimates/${body.estimate_id}`)
+      return
+    }
+    setError(body.error ?? 'Could not start an estimate.')
+  }
+
+  if (loading) return <p className="settings-loading">Loading estimates...</p>
+
+  return (
+    <div className="settings-section">
+      <div className="crm-section-header">
+        <h2 className="settings-section-title">Estimates</h2>
+        <button type="button" className="btn-secondary" onClick={createEstimate} disabled={creating}>
+          {creating ? 'Starting...' : 'New estimate'}
+        </button>
+      </div>
+
+      {error ? <p className="auth-error">{error}</p> : null}
+
+      {estimates.length === 0 ? (
+        <p className="crm-empty">No estimates yet.</p>
+      ) : (
+        <div className="crm-list">
+          {estimates.map((estimate) => (
+            <Link key={estimate.id} href={`/estimates/${estimate.id}`} className="crm-list-item">
+              <span className="crm-list-title">
+                Version {estimate.version} - {formatCents(estimate.total_cents)}
+              </span>
+              <span className="crm-list-subtitle">
+                <span className={`est-status est-status--${estimate.status}`}>
+                  {estimate.status}
+                </span>
+                {estimate.issued_at
+                  ? ` - issued ${new Date(estimate.issued_at).toLocaleDateString()}`
+                  : ' - not yet issued'}
+              </span>
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }

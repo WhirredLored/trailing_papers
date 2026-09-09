@@ -130,12 +130,16 @@ if (!SUPABASE_URL || !ANON_KEY || !SERVICE_KEY) {
         .single()
       expect(prErr, `${label} property insert: ${prErr?.message}`).toBeNull()
 
-      const { error: pjErr } = await admin.from('project').insert({
-        company_id: companyId,
-        property_id: pr!.id,
-        title: `Isolation ${label} Project`,
-        created_by: userId,
-      })
+      const { data: pj, error: pjErr } = await admin
+        .from('project')
+        .insert({
+          company_id: companyId,
+          property_id: pr!.id,
+          title: `Isolation ${label} Project`,
+          created_by: userId,
+        })
+        .select('id')
+        .single()
       expect(pjErr, `${label} project insert: ${pjErr?.message}`).toBeNull()
 
       const { error: ciErr } = await admin.from('catalog_item').insert({
@@ -145,6 +149,34 @@ if (!SUPABASE_URL || !ANON_KEY || !SERVICE_KEY) {
         created_by: userId,
       })
       expect(ciErr, `${label} catalog_item insert: ${ciErr?.message}`).toBeNull()
+
+      // C08. Left in draft deliberately: an issued estimate cannot be deleted
+      // (Law 3), so seeding one here would leak fixtures into the project on
+      // every run. Immutability is proven separately, not by this suite.
+      const { data: est, error: estErr } = await admin
+        .from('estimate')
+        .insert({
+          company_id: companyId,
+          project_id: pj!.id,
+          version: 1,
+          title: `Isolation ${label} Estimate`,
+          created_by: userId,
+        })
+        .select('id')
+        .single()
+      expect(estErr, `${label} estimate insert: ${estErr?.message}`).toBeNull()
+
+      const { error: elErr } = await admin.from('estimate_line').insert({
+        estimate_id: est!.id,
+        company_id: companyId,
+        sort_order: 0,
+        description: `Isolation ${label} Line`,
+        quantity: 1,
+        unit_price_cents: 12345,
+        unit_cost_cents: 10000,
+        created_by: userId,
+      })
+      expect(elErr, `${label} estimate_line insert: ${elErr?.message}`).toBeNull()
     }
 
     await seedCompany(companyAId, userAId, 'A')
@@ -172,6 +204,8 @@ if (!SUPABASE_URL || !ANON_KEY || !SERVICE_KEY) {
     // and companies or both deletes fail silently and leak test data.
     for (const companyId of [companyAId, companyBId]) {
       if (!companyId) continue
+      await admin.from('estimate_line').delete().eq('company_id', companyId)
+      await admin.from('estimate').delete().eq('company_id', companyId)
       await admin.from('catalog_item').delete().eq('company_id', companyId)
       await admin.from('project').delete().eq('company_id', companyId)
       await admin.from('property').delete().eq('company_id', companyId)
@@ -314,6 +348,73 @@ if (!SUPABASE_URL || !ANON_KEY || !SERVICE_KEY) {
 
     it('user B cannot read company A', async () => {
       const { data, error } = await clientB.from('project').select('*').eq('company_id', companyAId)
+      expect(error).toBeNull()
+      expect(data).toHaveLength(0)
+    })
+  })
+
+  // ─── C08: estimate table ────────────────────────────────────────────────────
+  describe('estimate table — cross-tenant isolation', () => {
+    it('user A can read company A', async () => {
+      const { data, error } = await clientA.from('estimate').select('*')
+      expect(error).toBeNull()
+      expect(data?.length).toBeGreaterThan(0)
+      data!.forEach((row) => expect(row.company_id).toBe(companyAId))
+    })
+
+    it('user A cannot read company B', async () => {
+      const { data, error } = await clientA
+        .from('estimate')
+        .select('*')
+        .eq('company_id', companyBId)
+      expect(error).toBeNull()
+      expect(data).toHaveLength(0)
+    })
+
+    it('user B cannot read company A', async () => {
+      const { data, error } = await clientB
+        .from('estimate')
+        .select('*')
+        .eq('company_id', companyAId)
+      expect(error).toBeNull()
+      expect(data).toHaveLength(0)
+    })
+
+    it('user B cannot rewrite the price on company A estimate', async () => {
+      const { data, error } = await clientB
+        .from('estimate')
+        .update({ title: 'hacked by B' })
+        .eq('company_id', companyAId)
+        .select('id')
+      expect(error).toBeNull()
+      expect(data).toHaveLength(0)
+    })
+  })
+
+  // ─── C08: estimate_line table ───────────────────────────────────────────────
+  describe('estimate_line table — cross-tenant isolation', () => {
+    it('user B can read company B', async () => {
+      const { data, error } = await clientB.from('estimate_line').select('*')
+      expect(error).toBeNull()
+      expect(data?.length).toBeGreaterThan(0)
+      data!.forEach((row) => expect(row.company_id).toBe(companyBId))
+    })
+
+    it('user A cannot read company B lines', async () => {
+      const { data, error } = await clientA
+        .from('estimate_line')
+        .select('*')
+        .eq('company_id', companyBId)
+      expect(error).toBeNull()
+      expect(data).toHaveLength(0)
+    })
+
+    it('user B cannot delete company A lines', async () => {
+      const { data, error } = await clientB
+        .from('estimate_line')
+        .delete()
+        .eq('company_id', companyAId)
+        .select('id')
       expect(error).toBeNull()
       expect(data).toHaveLength(0)
     })

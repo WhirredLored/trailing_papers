@@ -159,3 +159,59 @@ AWAITING HUMAN: the assemblies and measurement UI has not been exercised in a br
 real session — the pages compile and the maths underneath them is tested end to end, but no one
 has typed a dimension into the field on a real device. The `company-assets` storage bucket from
 C03 also remains outstanding.
+
+## C08 — feat(estimating): add versioned estimate builder with immutable issued versions
+
+`estimate` and `estimate_line` following the C02 tenancy template, plus the machinery
+that makes Law 3 real: a trigger on each table that freezes content, money terms and
+totals the moment an estimate leaves draft, and refuses inserts, updates and deletes on
+the lines of a frozen estimate. A draft can only leave draft through `issue_estimate()`,
+which announces itself with a transaction-local setting — so a direct
+`update ... set status='issued'`, even holding the service-role key, is rejected rather
+than producing an issued estimate with unfrozen totals. Three locking, idempotent SQL
+functions carry the state changes: `issue_estimate`, `create_estimate_revision`,
+`save_estimate_draft`.
+
+Pure engine in `lib/estimate.ts` — optional-line filtering, totals over the billable
+subset via the C05 engine, internal profitability (cost, pre-tax margin, hours by phase),
+group rollups for the summary rendering, and takeoff-to-lines conversion that carries the
+C07 derivation string onto each line. The builder runs the same functions in the browser
+that the server runs on save and at issue, so there is no second implementation of the
+money to drift.
+
+Builder UI at `/estimates/[id]`: add from the price book, from an assembly takeoff
+(reusing C07's measurement input, inserting the components as a labelled group), or free
+text; reorder by drag or by up/down buttons; group headings; optional lines that price on
+screen but stay out of every total until selected; markup/margin toggle; per-line
+taxability; discount and deposit terms defaulted from the company profile; an
+itemized-vs-summary preview of what the client will see; and an internal profitability
+panel. Issued estimates render the same page read-only with "create revision" in place of
+the editing controls.
+
+VERIFIED: 215 tests across 9 files (up from 187 across 8) — `npm run build`, `npm run test`,
+`npm run lint`, `npm run typecheck` all green, and a clean build from a deleted `.next`.
+The estimate engine's worked example is checked against hand-computed arithmetic end to
+end: a five-line siding job with one unselected option totalling $1,967.09 on a $2,005.00
+subtotal, 22.77% margin on $1,904.75 of pre-tax revenue, 16 hours of siding and 6 of demo.
+The isolation suite is 27 cases across 7 tables (was 20 across 5), now covering `estimate`
+and `estimate_line` in both directions plus cross-tenant update and delete attempts.
+Teardown verified against the live project afterwards: zero rows in every domain table and
+zero leftover fixture companies. The first two migrations were applied with
+`supabase db push` and types regenerated in the same breath.
+
+AWAITING HUMAN: **`20260908000002_estimate_retire_before_purge.sql` has not been applied.**
+`supabase db push` was declined by the sandbox partway through the session, so the third
+migration exists as a file only, and the live project still carries the absolute
+hard-delete block from the first migration. It must be pushed before the next commit.
+
+Because of that, the acceptance case "issue → attempt edit → blocked at the DB level, and
+the revision flow produces v2 with correct supersede states" is **NOT verified against the
+live project** — an issued fixture cannot be cleaned up until the purge path exists, so
+writing that test now would have leaked rows into the project on every run. The immutability
+triggers and the revision flow are implemented and typecheck, but no one has watched the
+database refuse an edit. That test is the first thing C09 should do after the push.
+
+Also unverified: the builder has not been exercised in a browser against a real session.
+The pages compile and the money underneath them is tested, but nobody has dragged a line or
+issued an estimate on a real device. The `company-assets` storage bucket from C03 remains
+outstanding.

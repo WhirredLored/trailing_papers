@@ -21,3 +21,6 @@ export type Update<T extends keyof PublicTables> = PublicTables[T]['Update']
 
 /** A database enum, e.g. Enums<'catalog_item_kind'>. */
 export type Enums<T extends keyof Database['public']['Enums']> = Database['public']['Enums'][T]
+
+/** The JSON shape Supabase RPC parameters and jsonb columns use. */
+export type { Json } from './supabase'
