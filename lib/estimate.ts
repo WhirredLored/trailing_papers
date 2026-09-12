@@ -302,6 +302,40 @@ export function priceFromCost(costCents: Cents, mode: PricingMode, bp: number): 
   return mode === 'margin' ? applyMargin(costCents, bp) : applyMarkup(costCents, bp)
 }
 
+/**
+ * Which rate prices a line that came from the catalog.
+ *
+ * A markup recorded on the catalog item is the contractor's considered rate for
+ * that specific item, so it beats the estimate's blanket rate. Margin is an
+ * estimate-level decision with no per-item equivalent, so margin mode always
+ * uses the estimate rate.
+ *
+ * BOTH ways of adding a priced line go through here — price-book search and
+ * assembly takeoff. They used to decide separately, and the takeoff path ignored
+ * the item's own markup entirely: with the estimate's own rate left at its
+ * default of zero, an inserted takeoff quoted every material at cost, and the
+ * same catalog item carried two different prices depending on how it was added.
+ */
+export function pricingBpFor(
+  itemDefaultMarkupBp: number | null | undefined,
+  mode: PricingMode,
+  estimateBp: number,
+): number {
+  if (mode !== 'markup') return estimateBp
+  const itemBp = itemDefaultMarkupBp ?? 0
+  return itemBp > 0 ? itemBp : estimateBp
+}
+
+/** Price a catalog-sourced line, applying the rule above. */
+export function priceCatalogLine(
+  costCents: Cents,
+  itemDefaultMarkupBp: number | null | undefined,
+  mode: PricingMode,
+  estimateBp: number,
+): Cents {
+  return priceFromCost(costCents, mode, pricingBpFor(itemDefaultMarkupBp, mode, estimateBp))
+}
+
 // ---------------------------------------------------------------------------
 // Assembly takeoff → estimate lines
 // ---------------------------------------------------------------------------
@@ -313,6 +347,8 @@ export interface TakeoffLineSource {
   unit: EstimateLineUnit
   unitCostCents: Cents
   taxable: boolean
+  /** The item's own markup, which beats the estimate rate — see pricingBpFor. */
+  defaultMarkupBp?: number | null
 }
 
 export interface TakeoffInsertOptions {
@@ -359,7 +395,12 @@ export function linesFromTakeoff(
       quantity: component.purchaseQuantity,
       unit: source.unit,
       kind: source.kind,
-      unitPriceCents: priceFromCost(source.unitCostCents, options.pricingMode, options.pricingBp),
+      unitPriceCents: priceCatalogLine(
+        source.unitCostCents,
+        source.defaultMarkupBp,
+        options.pricingMode,
+        options.pricingBp,
+      ),
       unitCostCents: source.unitCostCents,
       taxable: source.taxable,
       isOptional: options.isOptional ?? false,

@@ -273,3 +273,54 @@ so nothing was changed to work around it; if it recurs, `rm -rf .next` is the fi
 AWAITING HUMAN: the builder still has not been exercised in a browser against a real session —
 nobody has dragged a line, run a takeoff into an estimate, or issued one on a real device. The
 `company-assets` storage bucket from C03 also remains outstanding.
+
+RESOLVED 2026-09-12 — both done. See the browser-verification entry below; the bucket now exists
+(private, 5 MB, image MIME types matching pages/api/company/logo.ts) and a logo upload, signed
+URL and delete were round-tripped through it.
+
+## C08 follow-up — driven in a browser, and one real defect found
+
+The estimate builder has now been used against a real session, and it found a pricing bug that
+every other layer of verification had missed.
+
+WHAT WAS EXERCISED, all against the live project with a seeded demo tenant: sign-in and the
+session handshake; the project page's estimate tab and list; creating a draft; an assembly
+takeoff driven from the C07 measurement input (20 lin ft of J-channel, surfaces resolving to a
+driver quantity, three components inserted as a labelled group with their derivations intact);
+a price-book search and insert; a free-text optional line; live totals; the internal
+profitability panel; the itemized preview; issuing; the read-only frozen rendering; and the
+revision flow through to an editable v2 with its lines cloned. The ~300 lines of CSS written
+for this commit render correctly — which is the check C07 failed, and the reason this pass was
+worth doing.
+
+THE DEFECT. Takeoff-inserted lines ignored each catalog item's `default_markup_bp` and priced
+off the estimate's own rate alone. That rate defaults to zero, so inserting a takeoff into a
+new estimate quoted every material AT COST, and the profitability panel dutifully reported 0%
+margin. The same item added from the price book carried its markup, so one catalog item had two
+different prices depending on how it reached the estimate:
+
+    TRIM-JCHAN   cost $0.89   own markup 30%   price book $1.16   takeoff $0.89
+    FST-NAIL15   cost $45.00  own markup 20%   price book $54.00  takeoff $45.00
+
+Nothing caught this. The unit tests passed a markup in explicitly, so they never exercised the
+default; the database tests assert on totals computed from whatever prices they were handed; the
+build and typecheck have no opinion about pricing policy. It took inserting a takeoff and reading
+a 0% margin off the screen.
+
+THE FIX: `pricingBpFor()` in lib/estimate.ts is now the single place that decides which rate
+prices a catalog-sourced line — the item's own markup beats the estimate's blanket rate in markup
+mode, and margin mode always uses the estimate rate, since there is no per-item equivalent. Both
+the price-book picker and `linesFromTakeoff` call it, so the two paths cannot diverge again. Five
+regression tests cover it, including the zero-rate case that produced the at-cost quote.
+
+VERIFIED: the fix confirmed in the browser — a freshly inserted J-channel takeoff now prices at
+$1.16 and $54.00 where it previously read $0.89 and $45.00, while the already-cloned lines keep
+their frozen prices. 240 tests across 10 files. build, lint and typecheck green.
+
+The `company-assets` bucket was also created (private, 5 MB limit, the four image MIME types the
+logo route accepts), closing a C03 hand-off that had been open since that commit and that would
+have blocked C09, which stores generated PDFs to Storage and puts the company logo on the
+letterhead. A logo upload, signed URL and delete were round-tripped through it. Note for C09:
+buckets are not SQL-managed, so a `documents` bucket will need the same treatment.
+
+AWAITING HUMAN: nothing outstanding from C08.

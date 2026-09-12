@@ -11,7 +11,7 @@ import {
   computeProfitability,
   isBillable,
   linesFromTakeoff,
-  priceFromCost,
+  priceCatalogLine,
   summarizeGroups,
   type AmountMode,
   type DetailLevel,
@@ -1304,14 +1304,14 @@ function CatalogPicker({
       {loading ? <p className="field-hint">Searching…</p> : null}
       <ul className="est-picker-list">
         {items.slice(0, 25).map((item) => {
-          // A markup already on the item is the contractor's considered rate for
-          // that item; the estimate rate is the fallback, and margin pricing is
-          // an estimate-level decision so it always wins.
-          const bp =
-            pricingMode === 'markup' && item.default_markup_bp > 0
-              ? item.default_markup_bp
-              : pricingBp
-          const price = priceFromCost(item.unit_cost_cents, pricingMode, bp)
+          // priceCatalogLine owns the item-rate-beats-estimate-rate rule, and the
+          // takeoff path calls the same function.
+          const price = priceCatalogLine(
+            item.unit_cost_cents,
+            item.default_markup_bp,
+            pricingMode,
+            pricingBp,
+          )
           return (
             <li key={item.id}>
               <button
@@ -1408,6 +1408,7 @@ function AssemblyPicker({
       unit: c.catalog_item!.unit,
       unitCostCents: c.catalog_item!.unit_cost_cents,
       taxable: c.catalog_item!.taxable,
+      defaultMarkupBp: c.catalog_item!.default_markup_bp,
     }))
 
     onAdd(

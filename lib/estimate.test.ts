@@ -15,7 +15,9 @@ import {
   computeProfitability,
   isBillable,
   linesFromTakeoff,
+  priceCatalogLine,
   priceFromCost,
+  pricingBpFor,
   summarizeGroups,
   type EstimateLineDraft,
   type EstimateTerms,
@@ -284,6 +286,29 @@ describe('summarizeGroups — summary and itemized come from the same rows', () 
   })
 })
 
+describe('pricingBpFor — the same rule for both ways of adding a line', () => {
+  it('prefers the item rate over the estimate rate in markup mode', () => {
+    expect(pricingBpFor(3000, 'markup', 1000)).toBe(3000)
+  })
+
+  it('falls back to the estimate rate when the item has none', () => {
+    expect(pricingBpFor(0, 'markup', 1000)).toBe(1000)
+    expect(pricingBpFor(null, 'markup', 1000)).toBe(1000)
+    expect(pricingBpFor(undefined, 'markup', 1000)).toBe(1000)
+  })
+
+  it('ignores the item rate entirely in margin mode', () => {
+    // Margin is an estimate-level decision; there is no per-item equivalent.
+    expect(pricingBpFor(3000, 'margin', 1000)).toBe(1000)
+  })
+
+  it('prices a catalog line through that rule', () => {
+    expect(priceCatalogLine(10000, 2500, 'markup', 0)).toBe(12500)
+    expect(priceCatalogLine(10000, 0, 'markup', 2000)).toBe(12000)
+    expect(priceCatalogLine(10000, 2500, 'margin', 2000)).toBe(12500)
+  })
+})
+
 describe('priceFromCost', () => {
   it('markup and margin are different numbers on the same cost', () => {
     expect(priceFromCost(10000, 'markup', 2000)).toBe(12000)
@@ -337,6 +362,27 @@ describe('linesFromTakeoff', () => {
       taxable: false,
     },
   ]
+
+  it('applies the item own markup, not the estimate rate', () => {
+    // Regression: the takeoff path used to price off options.pricingBp alone and
+    // ignore the item default_markup_bp. With a new estimate rate at its
+    // default of zero, that quoted every inserted material AT COST — while the
+    // same item added from the price book carried its markup.
+    const lines = linesFromTakeoff(computeTakeoff(assembly, 370), [
+      { ...(sources[0] as TakeoffLineSource), defaultMarkupBp: 3000 },
+      { ...(sources[1] as TakeoffLineSource), defaultMarkupBp: 0 },
+    ], {
+      assemblyId: 'assembly-1',
+      assemblyGroupId: 'group-4',
+      pricingMode: 'markup',
+      pricingBp: 0,
+    })
+
+    // $120.00 cost + its own 30% = $156.00, not $120.00.
+    expect(lines[0]?.unitPriceCents).toBe(15600)
+    // No markup of its own and no estimate rate: priced at cost, honestly.
+    expect(lines[1]?.unitPriceCents).toBe(4500)
+  })
 
   it('converts a takeoff into priced, grouped, auditable lines', () => {
     const takeoff = computeTakeoff(assembly, 370)
