@@ -22,7 +22,7 @@ async function getAssemblies(req: NextApiRequest, res: NextApiResponse) {
        assembly_component (
          id, catalog_item_id, quantity_per_driver, waste_percent_bp,
          rounding_rule, package_size, sort_order, notes,
-         catalog_item:catalog_item_id ( id, code, name, unit, unit_cost_cents, default_markup_bp, taxable )
+         catalog_item:catalog_item_id ( id, code, name, kind, unit, unit_cost_cents, default_markup_bp, taxable )
        )`,
     )
     .eq('company_id', caller.companyId)

@@ -471,6 +471,259 @@ export type Database = {
         }
         Relationships: []
       }
+      estimate: {
+        Row: {
+          balance_due_cents: number
+          company_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          deleted_by: string | null
+          deposit_due_cents: number
+          deposit_mode: Database["public"]["Enums"]["amount_mode"]
+          deposit_value: number
+          detail_level: Database["public"]["Enums"]["estimate_detail_level"]
+          discount_cents: number
+          discount_mode: Database["public"]["Enums"]["amount_mode"]
+          discount_value: number
+          estimated_cost_cents: number
+          expires_at: string | null
+          id: string
+          internal_notes: string | null
+          issued_at: string | null
+          margin_bp: number
+          margin_cents: number
+          notes_to_client: string | null
+          pdf_document_id: string | null
+          pricing_bp: number
+          pricing_mode: Database["public"]["Enums"]["estimate_pricing_mode"]
+          project_id: string
+          revised_from_estimate_id: string | null
+          status: Database["public"]["Enums"]["estimate_status"]
+          subtotal_cents: number
+          superseded_by_estimate_id: string | null
+          tax_cents: number
+          tax_rate_bp: number
+          taxable_subtotal_cents: number
+          terms: string | null
+          title: string | null
+          total_cents: number
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          balance_due_cents?: number
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          deposit_due_cents?: number
+          deposit_mode?: Database["public"]["Enums"]["amount_mode"]
+          deposit_value?: number
+          detail_level?: Database["public"]["Enums"]["estimate_detail_level"]
+          discount_cents?: number
+          discount_mode?: Database["public"]["Enums"]["amount_mode"]
+          discount_value?: number
+          estimated_cost_cents?: number
+          expires_at?: string | null
+          id?: string
+          internal_notes?: string | null
+          issued_at?: string | null
+          margin_bp?: number
+          margin_cents?: number
+          notes_to_client?: string | null
+          pdf_document_id?: string | null
+          pricing_bp?: number
+          pricing_mode?: Database["public"]["Enums"]["estimate_pricing_mode"]
+          project_id: string
+          revised_from_estimate_id?: string | null
+          status?: Database["public"]["Enums"]["estimate_status"]
+          subtotal_cents?: number
+          superseded_by_estimate_id?: string | null
+          tax_cents?: number
+          tax_rate_bp?: number
+          taxable_subtotal_cents?: number
+          terms?: string | null
+          title?: string | null
+          total_cents?: number
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          balance_due_cents?: number
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          deposit_due_cents?: number
+          deposit_mode?: Database["public"]["Enums"]["amount_mode"]
+          deposit_value?: number
+          detail_level?: Database["public"]["Enums"]["estimate_detail_level"]
+          discount_cents?: number
+          discount_mode?: Database["public"]["Enums"]["amount_mode"]
+          discount_value?: number
+          estimated_cost_cents?: number
+          expires_at?: string | null
+          id?: string
+          internal_notes?: string | null
+          issued_at?: string | null
+          margin_bp?: number
+          margin_cents?: number
+          notes_to_client?: string | null
+          pdf_document_id?: string | null
+          pricing_bp?: number
+          pricing_mode?: Database["public"]["Enums"]["estimate_pricing_mode"]
+          project_id?: string
+          revised_from_estimate_id?: string | null
+          status?: Database["public"]["Enums"]["estimate_status"]
+          subtotal_cents?: number
+          superseded_by_estimate_id?: string | null
+          tax_cents?: number
+          tax_rate_bp?: number
+          taxable_subtotal_cents?: number
+          terms?: string | null
+          title?: string | null
+          total_cents?: number
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estimate_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "company"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "project"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_revised_from_estimate_id_fkey"
+            columns: ["revised_from_estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimate"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_superseded_by_estimate_id_fkey"
+            columns: ["superseded_by_estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimate"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      estimate_line: {
+        Row: {
+          assembly_group_id: string | null
+          assembly_id: string | null
+          catalog_item_id: string | null
+          company_id: string
+          created_at: string
+          created_by: string | null
+          derivation: string | null
+          description: string
+          driver_quantity: number | null
+          estimate_id: string
+          group_label: string | null
+          id: string
+          is_optional: boolean
+          is_selected: boolean
+          kind: Database["public"]["Enums"]["catalog_item_kind"]
+          quantity: number
+          sort_order: number
+          taxable: boolean
+          unit: Database["public"]["Enums"]["catalog_item_unit"]
+          unit_cost_cents: number
+          unit_price_cents: number
+          updated_at: string
+        }
+        Insert: {
+          assembly_group_id?: string | null
+          assembly_id?: string | null
+          catalog_item_id?: string | null
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          derivation?: string | null
+          description: string
+          driver_quantity?: number | null
+          estimate_id: string
+          group_label?: string | null
+          id?: string
+          is_optional?: boolean
+          is_selected?: boolean
+          kind?: Database["public"]["Enums"]["catalog_item_kind"]
+          quantity?: number
+          sort_order?: number
+          taxable?: boolean
+          unit?: Database["public"]["Enums"]["catalog_item_unit"]
+          unit_cost_cents?: number
+          unit_price_cents?: number
+          updated_at?: string
+        }
+        Update: {
+          assembly_group_id?: string | null
+          assembly_id?: string | null
+          catalog_item_id?: string | null
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          derivation?: string | null
+          description?: string
+          driver_quantity?: number | null
+          estimate_id?: string
+          group_label?: string | null
+          id?: string
+          is_optional?: boolean
+          is_selected?: boolean
+          kind?: Database["public"]["Enums"]["catalog_item_kind"]
+          quantity?: number
+          sort_order?: number
+          taxable?: boolean
+          unit?: Database["public"]["Enums"]["catalog_item_unit"]
+          unit_cost_cents?: number
+          unit_price_cents?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estimate_line_assembly_id_fkey"
+            columns: ["assembly_id"]
+            isOneToOne: false
+            referencedRelation: "assembly"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_line_catalog_item_id_fkey"
+            columns: ["catalog_item_id"]
+            isOneToOne: false
+            referencedRelation: "catalog_item"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_line_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "company"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_line_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimate"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invite_token: {
         Row: {
           company_id: string
@@ -703,8 +956,168 @@ export type Database = {
     Functions: {
       auth_company_id: { Args: never; Returns: string }
       auth_user_role: { Args: never; Returns: string }
+      create_estimate_revision: {
+        Args: { p_actor: string; p_company_id: string; p_estimate_id: string }
+        Returns: {
+          balance_due_cents: number
+          company_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          deleted_by: string | null
+          deposit_due_cents: number
+          deposit_mode: Database["public"]["Enums"]["amount_mode"]
+          deposit_value: number
+          detail_level: Database["public"]["Enums"]["estimate_detail_level"]
+          discount_cents: number
+          discount_mode: Database["public"]["Enums"]["amount_mode"]
+          discount_value: number
+          estimated_cost_cents: number
+          expires_at: string | null
+          id: string
+          internal_notes: string | null
+          issued_at: string | null
+          margin_bp: number
+          margin_cents: number
+          notes_to_client: string | null
+          pdf_document_id: string | null
+          pricing_bp: number
+          pricing_mode: Database["public"]["Enums"]["estimate_pricing_mode"]
+          project_id: string
+          revised_from_estimate_id: string | null
+          status: Database["public"]["Enums"]["estimate_status"]
+          subtotal_cents: number
+          superseded_by_estimate_id: string | null
+          tax_cents: number
+          tax_rate_bp: number
+          taxable_subtotal_cents: number
+          terms: string | null
+          title: string | null
+          total_cents: number
+          updated_at: string
+          version: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "estimate"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      issue_estimate: {
+        Args: {
+          p_company_id: string
+          p_detail_level: Database["public"]["Enums"]["estimate_detail_level"]
+          p_estimate_id: string
+          p_expires_at: string
+          p_profit: Json
+          p_totals: Json
+        }
+        Returns: {
+          balance_due_cents: number
+          company_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          deleted_by: string | null
+          deposit_due_cents: number
+          deposit_mode: Database["public"]["Enums"]["amount_mode"]
+          deposit_value: number
+          detail_level: Database["public"]["Enums"]["estimate_detail_level"]
+          discount_cents: number
+          discount_mode: Database["public"]["Enums"]["amount_mode"]
+          discount_value: number
+          estimated_cost_cents: number
+          expires_at: string | null
+          id: string
+          internal_notes: string | null
+          issued_at: string | null
+          margin_bp: number
+          margin_cents: number
+          notes_to_client: string | null
+          pdf_document_id: string | null
+          pricing_bp: number
+          pricing_mode: Database["public"]["Enums"]["estimate_pricing_mode"]
+          project_id: string
+          revised_from_estimate_id: string | null
+          status: Database["public"]["Enums"]["estimate_status"]
+          subtotal_cents: number
+          superseded_by_estimate_id: string | null
+          tax_cents: number
+          tax_rate_bp: number
+          taxable_subtotal_cents: number
+          terms: string | null
+          title: string | null
+          total_cents: number
+          updated_at: string
+          version: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "estimate"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      save_estimate_draft: {
+        Args: {
+          p_actor: string
+          p_company_id: string
+          p_estimate_id: string
+          p_header: Json
+          p_lines: Json
+          p_profit: Json
+          p_totals: Json
+        }
+        Returns: {
+          balance_due_cents: number
+          company_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          deleted_by: string | null
+          deposit_due_cents: number
+          deposit_mode: Database["public"]["Enums"]["amount_mode"]
+          deposit_value: number
+          detail_level: Database["public"]["Enums"]["estimate_detail_level"]
+          discount_cents: number
+          discount_mode: Database["public"]["Enums"]["amount_mode"]
+          discount_value: number
+          estimated_cost_cents: number
+          expires_at: string | null
+          id: string
+          internal_notes: string | null
+          issued_at: string | null
+          margin_bp: number
+          margin_cents: number
+          notes_to_client: string | null
+          pdf_document_id: string | null
+          pricing_bp: number
+          pricing_mode: Database["public"]["Enums"]["estimate_pricing_mode"]
+          project_id: string
+          revised_from_estimate_id: string | null
+          status: Database["public"]["Enums"]["estimate_status"]
+          subtotal_cents: number
+          superseded_by_estimate_id: string | null
+          tax_cents: number
+          tax_rate_bp: number
+          taxable_subtotal_cents: number
+          terms: string | null
+          title: string | null
+          total_cents: number
+          updated_at: string
+          version: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "estimate"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
     }
     Enums: {
+      amount_mode: "percent" | "fixed"
       assembly_driver_unit: "sq_ft" | "lin_ft" | "ea" | "sq" | "opening"
       catalog_item_kind:
         | "labor"
@@ -720,6 +1133,15 @@ export type Database = {
         | "hour"
         | "day"
         | "load"
+      estimate_detail_level: "itemized" | "summary"
+      estimate_pricing_mode: "markup" | "margin"
+      estimate_status:
+        | "draft"
+        | "issued"
+        | "approved"
+        | "declined"
+        | "expired"
+        | "superseded"
       project_status:
         | "lead"
         | "estimating"
@@ -861,6 +1283,7 @@ export const Constants = {
   },
   public: {
     Enums: {
+      amount_mode: ["percent", "fixed"],
       assembly_driver_unit: ["sq_ft", "lin_ft", "ea", "sq", "opening"],
       catalog_item_kind: [
         "labor",
@@ -870,6 +1293,16 @@ export const Constants = {
         "other",
       ],
       catalog_item_unit: ["ea", "sq_ft", "lin_ft", "sq", "hour", "day", "load"],
+      estimate_detail_level: ["itemized", "summary"],
+      estimate_pricing_mode: ["markup", "margin"],
+      estimate_status: [
+        "draft",
+        "issued",
+        "approved",
+        "declined",
+        "expired",
+        "superseded",
+      ],
       project_status: [
         "lead",
         "estimating",

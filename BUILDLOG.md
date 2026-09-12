@@ -159,3 +159,168 @@ AWAITING HUMAN: the assemblies and measurement UI has not been exercised in a br
 real session — the pages compile and the maths underneath them is tested end to end, but no one
 has typed a dimension into the field on a real device. The `company-assets` storage bucket from
 C03 also remains outstanding.
+
+## C08 — feat(estimating): add versioned estimate builder with immutable issued versions
+
+`estimate` and `estimate_line` following the C02 tenancy template, plus the machinery
+that makes Law 3 real: a trigger on each table that freezes content, money terms and
+totals the moment an estimate leaves draft, and refuses inserts, updates and deletes on
+the lines of a frozen estimate. A draft can only leave draft through `issue_estimate()`,
+which announces itself with a transaction-local setting — so a direct
+`update ... set status='issued'`, even holding the service-role key, is rejected rather
+than producing an issued estimate with unfrozen totals. Three locking, idempotent SQL
+functions carry the state changes: `issue_estimate`, `create_estimate_revision`,
+`save_estimate_draft`.
+
+Pure engine in `lib/estimate.ts` — optional-line filtering, totals over the billable
+subset via the C05 engine, internal profitability (cost, pre-tax margin, hours by phase),
+group rollups for the summary rendering, and takeoff-to-lines conversion that carries the
+C07 derivation string onto each line. The builder runs the same functions in the browser
+that the server runs on save and at issue, so there is no second implementation of the
+money to drift.
+
+Builder UI at `/estimates/[id]`: add from the price book, from an assembly takeoff
+(reusing C07's measurement input, inserting the components as a labelled group), or free
+text; reorder by drag or by up/down buttons; group headings; optional lines that price on
+screen but stay out of every total until selected; markup/margin toggle; per-line
+taxability; discount and deposit terms defaulted from the company profile; an
+itemized-vs-summary preview of what the client will see; and an internal profitability
+panel. Issued estimates render the same page read-only with "create revision" in place of
+the editing controls.
+
+VERIFIED: 215 tests across 9 files (up from 187 across 8) — `npm run build`, `npm run test`,
+`npm run lint`, `npm run typecheck` all green, and a clean build from a deleted `.next`.
+The estimate engine's worked example is checked against hand-computed arithmetic end to
+end: a five-line siding job with one unselected option totalling $1,967.09 on a $2,005.00
+subtotal, 22.77% margin on $1,904.75 of pre-tax revenue, 16 hours of siding and 6 of demo.
+The isolation suite is 27 cases across 7 tables (was 20 across 5), now covering `estimate`
+and `estimate_line` in both directions plus cross-tenant update and delete attempts.
+Teardown verified against the live project afterwards: zero rows in every domain table and
+zero leftover fixture companies. The first two migrations were applied with
+`supabase db push` and types regenerated in the same breath.
+
+AWAITING HUMAN: **`20260908000002_estimate_retire_before_purge.sql` has not been applied.**
+`supabase db push` was declined by the sandbox partway through the session, so the third
+migration exists as a file only, and the live project still carries the absolute
+hard-delete block from the first migration. It must be pushed before the next commit.
+
+Because of that, the acceptance case "issue → attempt edit → blocked at the DB level, and
+the revision flow produces v2 with correct supersede states" is **NOT verified against the
+live project** — an issued fixture cannot be cleaned up until the purge path exists, so
+writing that test now would have leaked rows into the project on every run. The immutability
+triggers and the revision flow are implemented and typecheck, but no one has watched the
+database refuse an edit. That test is the first thing C09 should do after the push.
+
+RESOLVED 2026-09-08 — migration applied with `supabase db push`, types regenerated (no diff:
+the migration only replaces two function bodies), and the acceptance case is now proven by
+`lib/estimate-db.test.ts`. See the follow-up entry below.
+
+Also unverified: the builder has not been exercised in a browser against a real session.
+The pages compile and the money underneath them is tested, but nobody has dragged a line or
+issued an estimate on a real device. The `company-assets` storage bucket from C03 remains
+outstanding.
+
+## C08 follow-up — the acceptance case, proven
+
+`20260908000002_estimate_retire_before_purge.sql` applied; all eight migrations now report
+local and remote in sync. `lib/estimate-db.test.ts` is the C08 acceptance case, run against
+the live project through the SERVICE-ROLE client — which bypasses RLS entirely, so what
+refuses these writes is the trigger and nothing else. `npm run test:estimates` runs it alone.
+
+VERIFIED, 20 cases, all observed passing:
+  - Issuing froze the expected totals onto the row ($1,335.00 subtotal, $65.63 tax on the one
+    taxable line, $1,400.63 total, $1,005.00 cost, $330.00 margin).
+  - An issued estimate refuses: a change to its notes, a change to its total, adding a line,
+    editing a line, deleting a line, deleting the estimate, a status flip back to draft, and
+    a save through `save_estimate_draft`. It still allows issued → approved.
+  - A draft refuses a hand-written `status = 'issued'` that bypasses `issue_estimate()`, and
+    stays editable afterwards.
+  - The revision flow: v1 clones to a v2 draft with its lines copied; v1 stays `approved`
+    with a null supersede pointer while v2 is still a draft; asking for a revision twice
+    returns the same v2 (idempotent); revising a draft is refused; revising with the wrong
+    company id is refused; v2 is editable and re-prices; issuing v2 flips v1 to `superseded`
+    with `superseded_by_estimate_id` set, and v1 keeps its own frozen totals; issuing v2 a
+    second time changes nothing (idempotent).
+  - Retire before purge: deleting an issued estimate is refused, setting `deleted_at` then
+    deleting succeeds, and the lines go with it.
+
+Teardown verified: zero rows in every domain table and zero auth users afterwards, across two
+consecutive full-suite runs.
+
+Hook timeouts cost two rounds of leaked fixtures and are worth recording. The new suite's first
+run timed out in `beforeAll` at vitest's 10s default — an auth user plus six domain rows and an
+issue round-trip does not fit — and left a company, a draft estimate, two lines, two projects, a
+property, a client and an auth user behind in the live project. Then the C08 rows I added to
+`isolation.test.ts`'s seed pushed THAT suite over the same 10s ceiling, in both `beforeAll` and
+`afterAll`, leaking two more companies: a regression I introduced with the tenancy cases and did
+not catch, because the suite had passed comfortably before the two extra inserts per tenant. Both
+leaks were purged by hand and verified gone. The fix is `hookTimeout: 60_000` in
+`vitest.config.ts` rather than per-file arguments, so every future live-project suite inherits it.
+The lesson is the one worth keeping: a hook that times out mid-seed does not clean up after
+itself, so the ceiling has to be generous enough that it never trips.
+
+Full suite 235 tests across 10 files (was 215 across 9). build, lint and typecheck green.
+
+NOTE — `npm run build` is intermittently failing on this machine, and my earlier claim in this
+session that it "no longer reproduces" was wrong. It failed three times, passed after
+`rm -rf .next`, then failed three more times later, and has since passed eleven consecutive
+runs including after regenerating types, touching files and adding and removing files. The
+stack is inside webpack's own filesystem snapshot code — `FileSystemInfo` hashing a directory
+entry whose `hash` is undefined — not in application code, and the same tree builds clean
+repeatedly. Clearing `.next` resolves it every time. I could not find a deterministic trigger,
+so nothing was changed to work around it; if it recurs, `rm -rf .next` is the fix.
+
+AWAITING HUMAN: the builder still has not been exercised in a browser against a real session —
+nobody has dragged a line, run a takeoff into an estimate, or issued one on a real device. The
+`company-assets` storage bucket from C03 also remains outstanding.
+
+RESOLVED 2026-09-12 — both done. See the browser-verification entry below; the bucket now exists
+(private, 5 MB, image MIME types matching pages/api/company/logo.ts) and a logo upload, signed
+URL and delete were round-tripped through it.
+
+## C08 follow-up — driven in a browser, and one real defect found
+
+The estimate builder has now been used against a real session, and it found a pricing bug that
+every other layer of verification had missed.
+
+WHAT WAS EXERCISED, all against the live project with a seeded demo tenant: sign-in and the
+session handshake; the project page's estimate tab and list; creating a draft; an assembly
+takeoff driven from the C07 measurement input (20 lin ft of J-channel, surfaces resolving to a
+driver quantity, three components inserted as a labelled group with their derivations intact);
+a price-book search and insert; a free-text optional line; live totals; the internal
+profitability panel; the itemized preview; issuing; the read-only frozen rendering; and the
+revision flow through to an editable v2 with its lines cloned. The ~300 lines of CSS written
+for this commit render correctly — which is the check C07 failed, and the reason this pass was
+worth doing.
+
+THE DEFECT. Takeoff-inserted lines ignored each catalog item's `default_markup_bp` and priced
+off the estimate's own rate alone. That rate defaults to zero, so inserting a takeoff into a
+new estimate quoted every material AT COST, and the profitability panel dutifully reported 0%
+margin. The same item added from the price book carried its markup, so one catalog item had two
+different prices depending on how it reached the estimate:
+
+    TRIM-JCHAN   cost $0.89   own markup 30%   price book $1.16   takeoff $0.89
+    FST-NAIL15   cost $45.00  own markup 20%   price book $54.00  takeoff $45.00
+
+Nothing caught this. The unit tests passed a markup in explicitly, so they never exercised the
+default; the database tests assert on totals computed from whatever prices they were handed; the
+build and typecheck have no opinion about pricing policy. It took inserting a takeoff and reading
+a 0% margin off the screen.
+
+THE FIX: `pricingBpFor()` in lib/estimate.ts is now the single place that decides which rate
+prices a catalog-sourced line — the item's own markup beats the estimate's blanket rate in markup
+mode, and margin mode always uses the estimate rate, since there is no per-item equivalent. Both
+the price-book picker and `linesFromTakeoff` call it, so the two paths cannot diverge again. Five
+regression tests cover it, including the zero-rate case that produced the at-cost quote.
+
+VERIFIED: the fix confirmed in the browser — a freshly inserted J-channel takeoff now prices at
+$1.16 and $54.00 where it previously read $0.89 and $45.00, while the already-cloned lines keep
+their frozen prices. 240 tests across 10 files. build, lint and typecheck green.
+
+The `company-assets` bucket was also created (private, 5 MB limit, the four image MIME types the
+logo route accepts), closing a C03 hand-off that had been open since that commit and that would
+have blocked C09, which stores generated PDFs to Storage and puts the company logo on the
+letterhead. A logo upload, signed URL and delete were round-tripped through it. Note for C09:
+buckets are not SQL-managed, so a `documents` bucket will need the same treatment.
+
+AWAITING HUMAN: nothing outstanding from C08.
