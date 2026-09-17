@@ -2,11 +2,12 @@
 
 One entry per commit: what was built, what was verified, what still needs a human.
 
-**Current status (2026-09-08):** M1 complete and the tenancy gate is proven — 20/20 cross-tenant
-isolation tests passing against the live project across three consecutive runs. All migrations
-through C06 are applied. `build`, `test`, `lint` and `typecheck` are green. C07 (assemblies) is
-in progress. The only outstanding manual step is the `company-assets` storage bucket, noted at
-the bottom of this file.
+**Current status (2026-09-17):** M1 complete and the tenancy gate is proven — 20/20 cross-tenant
+isolation tests passing against the live project across three consecutive runs. C08 (estimate
+builder) is committed and driven in a browser. C09 (PDF documents) is next. Two migrations are
+written but NOT applied: `20260908000002_estimate_retire_before_purge.sql` and
+`20260917000000_storage_buckets.sql`. There is no longer a manual dashboard step — buckets are
+declared in SQL; see the storage-buckets entry at the bottom of this file.
 
 ## C01 — build(repo): scaffold Next.js TypeScript app with Supabase and tooling
 
@@ -324,3 +325,74 @@ letterhead. A logo upload, signed URL and delete were round-tripped through it. 
 buckets are not SQL-managed, so a `documents` bucket will need the same treatment.
 
 AWAITING HUMAN: nothing outstanding from C08.
+
+## chore — storage buckets declared in SQL, ahead of C09
+
+C09 stores generated PDFs to Storage, so it needs a `documents` bucket. C08 left a note that
+this would need the same by-hand dashboard creation `company-assets` got. Doing it at the start
+meant first checking whether by-hand was actually required. It is not, and it never was.
+
+THE CORRECTION. C03 recorded that a Storage bucket "cannot be created via SQL migration" and
+made it a dashboard step. `storage.buckets` is an ordinary base table. Creating a bucket is an
+INSERT into it. Three facts, each checked against a live Supabase project on this org rather
+than recalled:
+
+    storage.buckets relkind                                    'r' (base table, not a view)
+    has_table_privilege('postgres','storage.buckets','INSERT')  true
+    pg_roles.rolbypassrls where rolname='postgres'              true  (table RLS is no obstacle)
+
+`db push` connects as `postgres`, so a migration can do this. One wrong sentence in C03 became
+an AWAITING HUMAN line that C03, C04, C06, C07 and C08 each carried forward, and that C09 was
+about to inherit. That is the actual cost worth recording — not the bucket.
+
+WHAT WAS WRITTEN. `supabase/migrations/20260917000000_storage_buckets.sql` declares both
+buckets as one idempotent `insert ... on conflict (id) do nothing`:
+
+    documents        private, 25 MB, application/pdf only
+    company-assets   private,  5 MB, the four image types pages/api/company/logo.ts accepts
+
+`company-assets` is backfilled because it existed only as a hand-made row in one project's
+dashboard, so a fresh ref could not come up from migrations alone. `do nothing` means the live
+bucket is never reconfigured underneath whoever created it.
+
+Storage policies on `storage.objects` are deliberately NOT here — C03 owns the `company-assets`
+policies (applied) and C09 owns the `documents` ones. So `documents` arrives private and
+reachable only by the service-role key until C09 adds them, which is the safe direction for a
+bucket to be incomplete in.
+
+VERIFIED: the INSERT parses and plans against a real Supabase `storage.buckets` — column names,
+types and the `on conflict (id)` arbiter all resolve — checked with `PREPARE`, which parses and
+plans without executing. The target project's bucket list was re-read afterwards and was
+unchanged, so nothing was written anywhere. `build`, `lint` and `typecheck` green.
+
+`test` is NOT fully green in this container, and the file count is the tell CLAUDE.md asks for:
+**2 failed | 8 passed (10 files), 193 tests passed** — against the 240 tests across 10 files C08
+recorded. `lib/isolation.test.ts` and `lib/estimate-db.test.ts` both wrap their entire body in an
+`if (!SUPABASE_URL || !ANON_KEY || !SERVICE_KEY) { warn } else { describe(...) }` guard, so with
+no credentials present the file defines no suite at all and vitest reports "No test suite found
+in file" as a FAILURE. Confirmed pre-existing and unrelated to this commit: `git stash -u` and a
+re-run give the identical 2 failed | 8 passed (10) / 193 passed. It is the absent credentials,
+not the change. The M1 tenancy gate is therefore UNVERIFIED in this session — it was last proven
+green at C08, and nothing here touches tenancy, but that is inference rather than an observation.
+Worth noting that the guard fails loudly instead of silently reporting a smaller green run, which
+is the better of the two behaviours given this gate went quietly dead for four days once.
+
+NOT VERIFIED, and the reason: the migration has not been run, and the `documents` bucket does
+not exist yet. **No PaperTrail Supabase project is reachable from this session.** There are no
+Supabase environment variables and no `.env`; the CLI is not linked (`db push` fails with
+`LegacyProjectNotLinkedError`, despite CLAUDE.md saying the link is in place — that claim holds
+for someone's local checkout, not for a fresh container); and of the four projects the account
+can see, none is PaperTrail — one is an unrelated auction/marketplace schema, two are paused
+under unrelated names, and the fourth is ACTIVE_HEALTHY but times out on every connection
+attempt, so it could not even be inspected. So this commit could not create the bucket, only
+make creating it a migration instead of a dashboard errand.
+
+Note that `supabase/migrations/20260904000001_company_profile.sql` still carries the incorrect
+"buckets are not SQL-managed" comment in its header. It is an applied migration and is not
+edited; the correction lives in the new migration's header and in CLAUDE.md.
+
+AWAITING HUMAN: run `npx supabase db push` (with the CLI linked, or apply the one statement in
+the SQL editor and `migration repair --status applied 20260917000000`), then confirm both
+buckets exist and `documents` is private. No type regeneration is needed — `gen types` covers
+the `public` schema and this migration adds nothing there. C09 is otherwise unblocked: its own
+migration adds the `document` table and the `documents` storage policies.
