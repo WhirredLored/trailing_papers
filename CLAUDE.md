@@ -88,6 +88,4 @@ feature — C03 for `company-assets`, C09 for `documents`.
 
 ## Outstanding
 
-`20260917000000_storage_buckets.sql` has not been applied: no Supabase project was
-reachable from the session that wrote it. Apply it with the usual `db push`, then confirm
-both buckets exist and `documents` is private.
+Nothing. All nine migrations are applied and both storage buckets exist.

@@ -4,10 +4,16 @@ One entry per commit: what was built, what was verified, what still needs a huma
 
 **Current status (2026-09-17):** M1 complete and the tenancy gate is proven — 20/20 cross-tenant
 isolation tests passing against the live project across three consecutive runs. C08 (estimate
-builder) is committed and driven in a browser. C09 (PDF documents) is next. Two migrations are
-written but NOT applied: `20260908000002_estimate_retire_before_purge.sql` and
-`20260917000000_storage_buckets.sql`. There is no longer a manual dashboard step — buckets are
-declared in SQL; see the storage-buckets entry at the bottom of this file.
+builder) is committed and driven in a browser. C09 (PDF documents) is next. All nine migrations
+are applied. There is no longer a manual dashboard step — buckets are declared in SQL; see the
+storage-buckets entry at the bottom of this file.
+
+CORRECTION: the version of this header committed in `chore(storage)` claimed TWO migrations were
+unapplied and named `20260908000002_estimate_retire_before_purge.sql` as one of them. That was
+wrong — it was applied on 2026-09-08 and both the RESOLVED note and the C08 follow-up entry below
+say so. Only `20260917000000_storage_buckets.sql` was ever pending. The mistake matters because
+re-pushing an applied migration is exactly the situation the `migration repair` note in CLAUDE.md
+exists for, so a future session acting on that header would have created the problem it warns of.
 
 ## C01 — build(repo): scaffold Next.js TypeScript app with Supabase and tooling
 
@@ -396,3 +402,10 @@ the SQL editor and `migration repair --status applied 20260917000000`), then con
 buckets exist and `documents` is private. No type regeneration is needed — `gen types` covers
 the `public` schema and this migration adds nothing there. C09 is otherwise unblocked: its own
 migration adds the `document` table and the `documents` storage policies.
+
+RESOLVED 2026-09-17 — `db push` run by the repo owner; the migration is applied and the
+`documents` bucket exists. NOT observed by the session that wrote this: it still has no
+credentials and no reachable project, so this records what the owner reported, not something
+verified here. The two things that would confirm it, for whoever next has access: `documents`
+and `company-assets` both present in `storage.buckets`, both with `public = false`. No type
+regeneration was needed and none was expected.
