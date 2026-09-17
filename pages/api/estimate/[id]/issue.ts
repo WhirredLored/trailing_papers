@@ -3,6 +3,7 @@ import { getServiceRoleClient } from '@/lib/supabase-server'
 import { requireUser } from '@/lib/auth-server'
 import { routeParam } from '@/lib/api-params'
 import { asJson, rowToDraft, snapshot, termsOf } from '@/lib/estimate-server'
+import { generateEstimateDocument } from '@/lib/document-server'
 import type { Enums } from '@/types/db'
 
 const DETAIL_LEVELS: Enums<'estimate_detail_level'>[] = ['itemized', 'summary']
@@ -95,6 +96,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (issueError) return res.status(400).json({ error: issueError.message })
 
-  // The PDF snapshot itself lands in C09; pdf_document_id is the column it fills.
-  return res.status(200).json({ estimate: data, already_issued: false })
+  // Take the PDF snapshot (C09). The estimate is already frozen and committed by
+  // this point, so a generation failure must NOT be reported as a failure to
+  // issue: that would tell the contractor their estimate did not go out when it
+  // did, and a retry would find it already issued. Instead the estimate comes
+  // back with document: null and a reason, and POST /api/estimate/:id/document
+  // retries generation on its own.
+  const generated = await generateEstimateDocument(db, {
+    companyId: caller.companyId,
+    estimateId: id,
+    actorId: caller.id,
+  })
+
+  return res.status(200).json({
+    estimate: data,
+    already_issued: false,
+    document: generated.ok ? generated.document : null,
+    document_error: generated.ok ? null : generated.error,
+  })
 }
