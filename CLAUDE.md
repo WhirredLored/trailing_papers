@@ -75,7 +75,19 @@ proves nothing. Tear down in foreign-key order — `company_id` references are
 `on delete restrict` and `created_by` references `auth.users`, so domain rows must go
 before users and companies or cleanup fails silently and leaks fixtures.
 
+## Storage buckets
+
+Buckets are declared in SQL, in `supabase/migrations/20260917000000_storage_buckets.sql`.
+`storage.buckets` is an ordinary table and `db push` connects as `postgres`, which holds
+INSERT on it — so a bucket is an `insert ... on conflict (id) do nothing`, not a dashboard
+chore. C03 claimed otherwise and left a hand-off note that six commits carried forward;
+don't reintroduce it. Add a new bucket to a new migration alongside its policies.
+
+The policies on `storage.objects` still belong to the commit that owns the bucket's
+feature — C03 for `company-assets`, C09 for `documents`.
+
 ## Outstanding
 
-The `company-assets` storage bucket (private) still has to be created by hand in the
-Supabase dashboard. C03 defines its RLS policies but buckets are not SQL-managed.
+`20260917000000_storage_buckets.sql` has not been applied: no Supabase project was
+reachable from the session that wrote it. Apply it with the usual `db push`, then confirm
+both buckets exist and `documents` is private.
