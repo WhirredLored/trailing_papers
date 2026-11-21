@@ -396,3 +396,55 @@ the SQL editor and `migration repair --status applied 20260917000000`), then con
 buckets exist and `documents` is private. No type regeneration is needed — `gen types` covers
 the `public` schema and this migration adds nothing there. C09 is otherwise unblocked: its own
 migration adds the `document` table and the `documents` storage policies.
+
+## chore — package-lock.json resynced so a cold container can install
+
+A fresh session could not install at all. `npm ci` refused outright with `EUSAGE`:
+
+    npm ci can only install packages when your package.json and package-lock.json
+    are in sync. Please update your lock file with npm install before continuing.
+      Missing: @emnapi/runtime@1.11.3 from lock file
+      Missing: @emnapi/core@1.11.3 from lock file
+      Invalid: lock file's @emnapi/wasi-threads@1.2.1 does not satisfy @emnapi/wasi-threads@1.2.3
+
+That is a hard failure, not a warning — it exits before writing `node_modules`, so with no
+dependencies on disk every one of the four gates fails with `next: not found` and the repo
+looks broken for a reason that has nothing to do with its code. Worth recording because it
+costs a cold session its first ten minutes before any real work starts.
+
+WHAT CHANGED. `npm install` to let npm resolve and rewrite the tree, nothing more. The diff is
+48 insertions and 15 deletions confined to the `@emnapi/*` wasm shims
+(`core`, `runtime`, `wasi-threads`) that hang off `@unrs/resolver-binding-wasm32-wasi`, a
+transitive of ESLint's resolver. **No first-party dependency moved** — `package.json` is
+untouched, and no direct dependency changed version. These are optional wasm fallbacks that
+never load on this platform, which is why the drift went unnoticed: the previous session ran on
+a tree that was already installed.
+
+VERIFIED, in this order and all observed rather than assumed:
+- `npm ci` now exits 0 from a deleted `node_modules` — this is the actual claim of the commit,
+  so it was run rather than inferred from `npm install` having succeeded.
+- All four gates re-run against that fresh `npm ci` tree, not the `npm install` one:
+  `build` 0, `lint` 0, `typecheck` 0.
+- `test` is at the same **2 failed | 8 passed (10 files), 193 tests passed** the previous commit
+  recorded. Unchanged by this commit, and the file count is the check CLAUDE.md asks for.
+
+STILL NOT VERIFIED, carried forward unchanged from the previous commit. `lib/isolation.test.ts`
+and `lib/estimate-db.test.ts` define no suite without Supabase credentials, so vitest reports
+each as a failed file. **The M1 tenancy gate is therefore UNVERIFIED in this session** — last
+proven green at C08. Nothing here touches tenancy, but that is inference, not an observation.
+
+No PaperTrail Supabase project is reachable from this session either, so
+`20260917000000_storage_buckets.sql` remains unapplied and the `documents` bucket still does not
+exist. Of the four projects the account can see: two are INACTIVE (paused); `Sat_Early_Endeavor`
+is ACTIVE_HEALTHY but is the unrelated auction/marketplace schema; `color-pebble-hovel` is
+ACTIVE_HEALTHY but times out on every connection, so it could not be inspected and cannot be
+ruled out. A further probe of it was not possible — the Supabase MCP session dropped and asked
+for a re-authentication that cannot be performed from here.
+
+AWAITING HUMAN, unchanged and now blocking the next commit:
+- Point the session at a PaperTrail project (or authorise creating one and running all nine
+  migrations), then `npx supabase db push` and confirm both buckets exist and `documents` is
+  private. C09 writes PDFs into `documents`, so this stops being a loose end at the next commit.
+- `prompts/README.md` still lists C08 as `next` and C09 as `planned`; C08 shipped in b9d5a13.
+  Left alone deliberately — `prompts/` is verbatim source material under CLAUDE.md, so the
+  status table is not something this chore should edit on its own initiative.
