@@ -37,7 +37,13 @@ npx supabase gen types typescript --linked > types/supabase.ts
 ```
 
 Skipping the regeneration makes every new table resolve to `never`, producing a wall
-of type errors that look like broken code but are not. The CLI is already linked.
+of type errors that look like broken code but are not.
+
+The CLI is linked in a local checkout, but **not in a fresh cloud container**: there is no
+`.env`, `db push` fails with `LegacyProjectNotLinkedError`, and the container's egress proxy
+carries HTTPS only, so Postgres on 5432 is unreachable even once the host is allowed. From a
+cloud session apply DDL with the Supabase MCP server instead, then record the history row under
+the version its repo file carries — that is the same gap `migration repair` exists to close.
 
 If a migration was applied by hand in the SQL editor, its history row is missing and
 `db push` will try to re-apply it — repair first:
@@ -88,6 +94,15 @@ feature — C03 for `company-assets`, C09 for `documents`.
 
 ## Outstanding
 
-`20260917000000_storage_buckets.sql` has not been applied: no Supabase project was
-reachable from the session that wrote it. Apply it with the usual `db push`, then confirm
-both buckets exist and `documents` is private.
+All ten migrations are applied to the `Trailing_papers` project (ref `ocghrrsotgprgrbvgyel`),
+and both storage buckets exist with `documents` private, 25 MB, `application/pdf` only.
+
+What is still unproven is everything that needs the **service-role key**, which no session has
+had: `test:isolation` (the M1 tenancy gate), `test:estimates` and `test:documents` all guard
+their whole body on it and so define no suite without it — `npm run test` reports them as three
+failed _files_, not as skips. Add `SUPABASE_SERVICE_ROLE_KEY` as an environment variable on the
+cloud environment and they collect.
+
+Two smaller items: two orphaned PDFs remain in the `documents` bucket from a 2026-10-02 test run
+whose tenants have been purged (`storage.objects` refuses direct SQL deletes, so they need the
+Storage API or the dashboard), and no browser has yet served a C09 route.

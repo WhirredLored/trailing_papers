@@ -165,6 +165,35 @@ export function formatCentsPlain(cents: Cents, locale = 'en-US'): string {
   }).format(cents / 100)
 }
 
+/**
+ * Format cents WITHOUT Intl, e.g. 125000 → "1,250.00", -4999 → "-49.99", 0 → "0.00".
+ *
+ * `formatCentsPlain` above goes through `Intl.NumberFormat`, whose exact output is
+ * a property of the ICU build bundled with the runtime — separators and the minus
+ * sign have changed across ICU versions before. That is harmless on screen and
+ * wrong for a document whose sha256 IS the evidence (C09): the same issued
+ * estimate rendered on a laptop and on the deploy target has to produce identical
+ * bytes, and an ICU upgrade must never silently change an already-stored hash.
+ *
+ * So the digit grouping is done here by hand. The output of this function is fixed
+ * by this function and nothing else, which is the only way the hash can mean what
+ * the evidence chain claims it means. Use it for anything that gets hashed,
+ * printed or signed; `formatCentsPlain` is fine for the screen.
+ */
+export function formatCentsStable(cents: Cents): string {
+  assertCents(cents)
+
+  const negative = cents < 0
+  const absolute = Math.abs(cents)
+  const dollars = Math.floor(absolute / 100)
+  const remainder = absolute % 100
+
+  // Group into thousands from the right: 1234567 → "1,234,567".
+  const grouped = String(dollars).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+
+  return `${negative ? '-' : ''}${grouped}.${String(remainder).padStart(2, '0')}`
+}
+
 // ---------------------------------------------------------------------------
 // Arithmetic
 // ---------------------------------------------------------------------------
