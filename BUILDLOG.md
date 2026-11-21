@@ -4,10 +4,17 @@ One entry per commit: what was built, what was verified, what still needs a huma
 
 **Current status (2026-09-17):** M1 complete and the tenancy gate is proven — 20/20 cross-tenant
 isolation tests passing against the live project across three consecutive runs. C08 (estimate
-builder) is committed and driven in a browser. C09 (PDF documents) is next. Two migrations are
-written but NOT applied: `20260908000002_estimate_retire_before_purge.sql` and
-`20260917000000_storage_buckets.sql`. There is no longer a manual dashboard step — buckets are
-declared in SQL; see the storage-buckets entry at the bottom of this file.
+builder) is committed and driven in a browser. C09 (documents) is committed. Nine migrations are
+applied; `20260917000001_documents.sql` is written and proven against a local Postgres but NOT
+yet applied to the hosted project. There is no longer a manual dashboard step — buckets are declared in SQL; see the
+storage-buckets entry at the bottom of this file.
+
+CORRECTION: the version of this header committed in `chore(storage)` claimed TWO migrations were
+unapplied and named `20260908000002_estimate_retire_before_purge.sql` as one of them. That was
+wrong — it was applied on 2026-09-08 and both the RESOLVED note and the C08 follow-up entry below
+say so. Only `20260917000000_storage_buckets.sql` was ever pending. The mistake matters because
+re-pushing an applied migration is exactly the situation the `migration repair` note in CLAUDE.md
+exists for, so a future session acting on that header would have created the problem it warns of.
 
 ## C01 — build(repo): scaffold Next.js TypeScript app with Supabase and tooling
 
@@ -396,3 +403,122 @@ the SQL editor and `migration repair --status applied 20260917000000`), then con
 buckets exist and `documents` is private. No type regeneration is needed — `gen types` covers
 the `public` schema and this migration adds nothing there. C09 is otherwise unblocked: its own
 migration adds the `document` table and the `documents` storage policies.
+
+RESOLVED 2026-09-17 — `db push` run by the repo owner; the migration is applied and the
+`documents` bucket exists. NOT observed by the session that wrote this: it still has no
+credentials and no reachable project, so this records what the owner reported, not something
+verified here. The two things that would confirm it, for whoever next has access: `documents`
+and `company-assets` both present in `storage.buckets`, both with `public = false`. No type
+regeneration was needed and none was expected.
+
+## C09 — feat(documents): add deterministic PDF generation with hashing and atomic numbering
+
+The `document` table, server-side PDF rendering on company letterhead, sha256 hashing, atomic
+per-company-per-kind numbering, and session-authorized downloads.
+
+WHAT MADE THIS COMMIT DIFFERENT: a local Postgres 16 was stood up and the whole migration chain
+applied to it, so for the first time in this project the SQL was EXECUTED before being committed
+rather than reasoned about. That is also how both defects below were found. The hosted project is
+still unreachable from this session — the local cluster is a stand-in for the SQL, not for the
+project.
+
+### Determinism, which is the whole point
+
+Regenerating an issued version must produce byte-identical output, because the sha256 is the
+evidence. Four sources of drift were pinned:
+
+    pdf-lib metadata     CreationDate/ModDate/Producer/Creator set from the frozen issued_at
+    money formatting     formatCentsStable() in lib/money.ts — hand-grouped, no Intl/ICU
+    date formatting      UTC against a fixed month table, never toLocaleDateString
+    fonts                standard-14 by name, so no font binary or version in the output
+
+VERIFIED: two renders of the same model hash identically, including across a one-second sleep and
+across a process timezone change (Asia/Tokyo vs America/Anchorage). Determinism is not achieved by
+ignoring the input — changing a total or the document number changes the hash, both asserted.
+Independently confirmed with poppler's `pdfinfo`, which is not pdf-lib and has no stake in the
+answer: `Producer: PaperTrail`, `CreationDate` and `ModDate` both `Thu Sep 17 14:30:00 2026 UTC`.
+
+### Two defects found, both by testing rather than by reading
+
+**`lpad` truncates.** `lpad(n::text, 4, '0')` renders document 10000 as `EST-1000` — the same
+client-facing number as document 1000, from a number that is unique in the database. Postgres
+lpad treats the width as exact, not as a minimum. Now `greatest(4, length(n::text))`. A contractor
+reads these numbers aloud to clients; two documents answering to `EST-1000` is a dispute, which is
+the exact thing this product exists to prevent. Caught by testing the 10000 boundary, not the
+happy path.
+
+**`getModificationDate()` lies.** The test asserting the frozen ModDate failed while the
+determinism tests passed — a contradiction, since a varying ModDate would break byte-equality.
+Reading the raw bytes settled it: `ModDate = D:20260917143000Z` is correctly in the file, and
+pdf-lib RECOMPUTES ModDate when a document is loaded. The renderer was right and the test was
+wrong. The assertion now reads the bytes, which is what gets hashed anyway. Worth recording
+because the instinct was to "fix" correct production code to satisfy a bad test.
+
+### Numbering
+
+`document_counter` plus `INSERT ... ON CONFLICT DO UPDATE ... RETURNING`, one row per company per
+kind. The upsert takes a row lock, so concurrent callers serialize rather than both computing the
+same next number from a stale read. A rolled-back caller leaves a gap, never a duplicate: a
+missing EST-0007 is a question, a second EST-0006 is a dispute.
+
+VERIFIED against the local Postgres with two genuinely concurrent sessions: session 1 opened a
+transaction, allocated, and held the lock for two seconds; session 2 started at 06:33:00, BLOCKED,
+and completed at 06:33:01 — after session 1 committed — with number 2. Distinct and sequential,
+observed rather than argued. Sequential allocation, per-kind independence and per-company
+independence were each confirmed the same way, as were: a duplicate version refused, a duplicate
+number refused, a malformed sha256 refused, and update and delete on a document row both refused
+by the freeze trigger with the intended messages.
+
+### The rest
+
+Letterhead with logo, legal name/DBA, address, licence and insurance; client and property blocks;
+itemized or summary lines; totals with deposit; terms, notes and a signature block. Print-safe US
+Letter, and grayscale-legible in the strict sense that no information is carried by colour — an
+optional line says "optional" rather than being blue.
+
+`sanitizeForPdf()` exists because pdf-lib THROWS on characters the standard-14 fonts cannot
+encode, and en-dashes and curly quotes arrive whenever a description is pasted out of a supplier's
+web page. Without it a real-world paste is a 500 on issuing.
+
+Issuing now takes the snapshot automatically. A generation failure does NOT fail the issue: the
+estimate is already frozen and committed by then, and reporting failure would tell the contractor
+their estimate did not go out when it did.
+
+The download route re-hashes the stored bytes and refuses to serve a mismatch. That is what the
+stored hash is for — serving an altered file as the issued one is precisely the failure the
+evidence chain exists to prevent.
+
+VERIFIED: 219 tests across 9 files passing (193 before). 26 new, covering determinism, wrapping,
+sanitisation, pagination and the stable money formatter. `build`, `lint` and `typecheck` green.
+The acceptance case was rendered and READ, not merely asserted on: a 30-line estimate with a long
+rural address produces three US Letter pages with the long descriptions wrapping inside their
+column, the money columns aligned, the column header repeated after the page break, and the footer
+numbering pages 1-3.
+
+NOT VERIFIED, and precisely why:
+
+  - **The migration is not applied to the hosted project.** It applies cleanly to a local
+    Postgres 16 with all ten migrations in order; the project runs Postgres 17 and is unreachable
+    from this session. Nothing here is version-specific, but that is inference.
+  - **Nothing has touched Supabase Storage.** Upload, download and the `documents` bucket's RLS
+    policy are unexercised — there is no Storage in a bare Postgres. The policy is a copy of
+    C03's proven `company-assets` shape against the same `storage.foldername(name))[1]` idiom.
+  - **`lib/document-db.test.ts` has never run.** It is the supabase-js-mediated version of the
+    numbering, immutability and tenancy checks, and needs credentials. The behaviours it asserts
+    were each proven directly in SQL as described above; what is unproven is that they survive
+    the PostgREST round trip. `npm run test:documents` runs it.
+  - **No browser has seen any of this.** No route has served a request.
+  - `npm run test` now reports **3 failed | 9 passed (12 files)** — the third being this new
+    live-database suite, failing to collect for the same missing-credentials reason as the other
+    two. Check the FILE count, per CLAUDE.md.
+
+`types/supabase.ts` was regenerated by a real `supabase gen types` run against the local cluster
+rather than hand-edited. That cluster cannot know the project's `graphql_public` schema or its
+PostgrestVersion, so only the generated `public` block was taken and every other region was
+asserted byte-identical to the committed file before writing. Re-run `gen types --linked` after
+applying the migration to confirm against the real project.
+
+AWAITING HUMAN: apply `20260917000001_documents.sql` with `npx supabase db push`, regenerate types
+in the same breath, then run `npm run test:documents` and `npm run test:isolation`. After that,
+issue an estimate in a browser and open the PDF — C08's lesson was that a browser pass found a
+pricing defect that every other layer had missed, and nothing here has been near a real request.

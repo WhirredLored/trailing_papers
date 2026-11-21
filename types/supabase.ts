@@ -471,6 +471,94 @@ export type Database = {
         }
         Relationships: []
       }
+      document: {
+        Row: {
+          byte_size: number
+          company_id: string
+          created_at: string
+          generated_at: string
+          generated_by: string | null
+          id: string
+          kind: Database["public"]["Enums"]["document_kind"]
+          number: number
+          number_text: string
+          related_id: string
+          sha256: string
+          storage_path: string
+          version: number
+        }
+        Insert: {
+          byte_size: number
+          company_id: string
+          created_at?: string
+          generated_at?: string
+          generated_by?: string | null
+          id?: string
+          kind: Database["public"]["Enums"]["document_kind"]
+          number: number
+          number_text: string
+          related_id: string
+          sha256: string
+          storage_path: string
+          version: number
+        }
+        Update: {
+          byte_size?: number
+          company_id?: string
+          created_at?: string
+          generated_at?: string
+          generated_by?: string | null
+          id?: string
+          kind?: Database["public"]["Enums"]["document_kind"]
+          number?: number
+          number_text?: string
+          related_id?: string
+          sha256?: string
+          storage_path?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "company"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      document_counter: {
+        Row: {
+          company_id: string
+          created_at: string
+          kind: Database["public"]["Enums"]["document_kind"]
+          last_value: number
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          kind: Database["public"]["Enums"]["document_kind"]
+          last_value?: number
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          kind?: Database["public"]["Enums"]["document_kind"]
+          last_value?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_counter_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "company"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       estimate: {
         Row: {
           balance_due_cents: number
@@ -595,6 +683,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "company"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_pdf_document_fkey"
+            columns: ["pdf_document_id"]
+            isOneToOne: false
+            referencedRelation: "document"
             referencedColumns: ["id"]
           },
           {
@@ -954,6 +1049,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      allocate_document_number: {
+        Args: {
+          p_company_id: string
+          p_kind: Database["public"]["Enums"]["document_kind"]
+        }
+        Returns: number
+      }
       auth_company_id: { Args: never; Returns: string }
       auth_user_role: { Args: never; Returns: string }
       create_estimate_revision: {
@@ -1004,6 +1106,16 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      dearmor: { Args: { "": string }; Returns: string }
+      document_number_text: {
+        Args: {
+          p_kind: Database["public"]["Enums"]["document_kind"]
+          p_number: number
+        }
+        Returns: string
+      }
+      gen_random_uuid: { Args: never; Returns: string }
+      gen_salt: { Args: { "": string }; Returns: string }
       issue_estimate: {
         Args: {
           p_company_id: string
@@ -1055,6 +1167,44 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "estimate"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      pgp_armor_headers: {
+        Args: { "": string }
+        Returns: Record<string, unknown>[]
+      }
+      record_document: {
+        Args: {
+          p_actor?: string
+          p_byte_size: number
+          p_company_id: string
+          p_kind: Database["public"]["Enums"]["document_kind"]
+          p_number: number
+          p_related_id: string
+          p_sha256: string
+          p_storage_path: string
+          p_version: number
+        }
+        Returns: {
+          byte_size: number
+          company_id: string
+          created_at: string
+          generated_at: string
+          generated_by: string | null
+          id: string
+          kind: Database["public"]["Enums"]["document_kind"]
+          number: number
+          number_text: string
+          related_id: string
+          sha256: string
+          storage_path: string
+          version: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "document"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -1133,6 +1283,12 @@ export type Database = {
         | "hour"
         | "day"
         | "load"
+      document_kind:
+        | "estimate"
+        | "change_order"
+        | "invoice"
+        | "signed_copy"
+        | "receipt"
       estimate_detail_level: "itemized" | "summary"
       estimate_pricing_mode: "markup" | "margin"
       estimate_status:
@@ -1293,6 +1449,13 @@ export const Constants = {
         "other",
       ],
       catalog_item_unit: ["ea", "sq_ft", "lin_ft", "sq", "hour", "day", "load"],
+      document_kind: [
+        "estimate",
+        "change_order",
+        "invoice",
+        "signed_copy",
+        "receipt",
+      ],
       estimate_detail_level: ["itemized", "summary"],
       estimate_pricing_mode: ["markup", "margin"],
       estimate_status: [

@@ -88,6 +88,7 @@ feature — C03 for `company-assets`, C09 for `documents`.
 
 ## Outstanding
 
-`20260917000000_storage_buckets.sql` has not been applied: no Supabase project was
-reachable from the session that wrote it. Apply it with the usual `db push`, then confirm
-both buckets exist and `documents` is private.
+`20260917000001_documents.sql` (C09) is **not applied**. The nine before it are, and both
+storage buckets exist. It was proven against a local Postgres rather than the hosted
+project, so apply it with `db push`, regenerate types in the same breath, then run
+`npm run test:documents` — that suite has never run anywhere.
