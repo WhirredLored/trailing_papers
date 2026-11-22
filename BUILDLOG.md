@@ -840,3 +840,15 @@ clean tree at `ac4572d`.
 AWAITING HUMAN: a browser pass on C09 — issue an estimate and open the generated PDF. Storage
 upload and download have still never served a request, and C08's browser pass is what caught a
 pricing defect every other layer of verification had missed.
+
+## docs — migration count corrected from eleven to twelve
+
+A one-word fix, recorded because this repo has twice paid for a single wrong sentence left
+standing in its own instructions. The previous entry's CLAUDE.md update said "all eleven
+migrations are applied"; it was written before `20261122000001_purge_document_rpc.sql` existed
+and the count was never revisited. `supabase/migrations/` holds twelve `.sql` files (plus
+`.gitkeep`), and `supabase_migrations.schema_migrations` holds twelve rows — both counts observed
+rather than assumed, and they agree.
+
+VERIFIED: `build` 0, `lint` 0, `typecheck` 0; `test` unchanged at `3 failed | 9 passed (12)` /
+219 passed in a container without the service-role key, which is the credentials guard.
