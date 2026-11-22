@@ -103,15 +103,20 @@ all three live suites collect and pass: `test:isolation` 27, `test:estimates` 20
 that key still reports three failed _files_ — that is the credentials guard, not a regression, and
 the file count is the tell.
 
+The suites also no longer leak. `lib/document-db.test.ts` used to strand a fixture tenant on
+every run, because a document row cannot be deleted and `company_id` is `on delete restrict`.
+`purge_document(uuid)` (migration `20261122000001`) is the only path the freeze trigger allows —
+it sets `papertrail.purging` and deletes in one transaction, which a PostgREST caller cannot do
+with two separate calls. Teardown uses it, and **throws** if anything is left behind. Verified by
+two consecutive runs that left the project bit-for-bit identical. Both storage buckets are empty.
+
+If you add a suite that writes `document` rows, tear them down through `purge_document` —
+a plain delete is refused, and the row will pin its company forever.
+
 What remains:
 
-- **`lib/document-db.test.ts` still leaks fixtures on every run.** A document row blocks its
-  company from being torn down, so each run strands ~2 companies, 1 estimate, 1 document and
-  6 counters. `20261122000000_document_purge_path.sql` now provides the way out — name the row in
-  `papertrail.purging` in the same transaction, then delete — but the suite's teardown does not
-  use it yet. Wiring it in is the fix; until then a run needs a manual purge.
-- Two orphaned PDFs remain in the `documents` bucket from a 2026-10-02 run whose tenants are
-  gone. `storage.objects` refuses direct SQL deletes, so they need the Storage API or the
-  dashboard.
-- No browser has served a C09 route. Storage upload/download is still unexercised — the DB suite
-  does not touch it.
+- No browser has served a C09 route, and Storage upload/download is still unexercised — the DB
+  suite does not touch it. C08's lesson was that a browser pass caught a pricing defect every
+  other layer missed.
+- `prompts/README.md` still lists C08 as `next` and C09 as `planned`; both have shipped. It is
+  verbatim source material, so it is recorded here rather than edited.

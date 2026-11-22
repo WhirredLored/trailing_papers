@@ -796,3 +796,47 @@ NOT VERIFIED: **the new teardown has not run.** That needs a session holding the
 key; a worker run is queued and its result belongs in the next entry. Until it reports, the claim
 that the leak is fixed is a design argument, not an observation. The two orphaned PDFs from
 2026-10-02 are also still in the bucket.
+
+## C09 follow-up — the teardown fix verified, and the bucket emptied
+
+The previous entry's claim was a design argument. It has now been run, in a session holding the
+service-role key, and the result is observed rather than inferred.
+
+ZERO DRIFT. The same count query was taken before the runs, after `test:documents`, and again
+after a full `npm run test`. All three are identical:
+
+    companies=2  estimates=2  documents=0  counters=0  users=2  fixtures=0
+
+That is the baseline exactly, on every column, in both directions. No stranded `c09-%` company.
+The teardown's new throw-on-incomplete-cleanup path never fired, because there was nothing left
+to report. Verified independently from this session afterwards, against the same project, with
+the same numbers — plus `purge_document` present and 12 history rows matching the 12 migration
+files on disk.
+
+    npm run test:documents    Test Files  1 passed (1)       Tests  12 passed (12)
+    npm run test              Test Files 12 passed (12)      Tests 278 passed (278)
+
+**`lib/document-db.test.ts` no longer leaks.** Two consecutive runs left the live project
+bit-for-bit identical, where one run previously stranded 4 companies, 2 estimates, 2 documents
+and 12 counters.
+
+STORAGE IS NOW CLEAN. The two PDFs orphaned on 2026-10-02 were removed through the Storage API
+with the service-role key — `storage.objects` refuses direct SQL deletes, which is what made this
+a hand step. Both returned HTTP 200, and the result was checked three ways: SQL says 0 objects in
+every bucket, a Storage API listing of `documents` returns `[]`, and a direct GET of each path now
+404s. Confirmed from this session too: 0 objects across all buckets. Only those two paths were
+targeted.
+
+ONE DOCUMENTATION WART, deliberately not fixed. `20261122000000_document_purge_path.sql` still
+says in its header "No helper function is added on purpose", which `20261122000001` then
+contradicts by adding one. Applied migrations are never edited, so the correction lives in the
+newer migration's header (which withdraws the claim explicitly and says why) and in DECISIONS,
+not by rewriting history. Worth knowing before that header misleads someone the way C03's one
+wrong sentence did for six commits.
+
+VERIFIED: nothing was edited, committed or schema-changed by the verification run; it reported a
+clean tree at `ac4572d`.
+
+AWAITING HUMAN: a browser pass on C09 — issue an estimate and open the generated PDF. Storage
+upload and download have still never served a request, and C08's browser pass is what caught a
+pricing defect every other layer of verification had missed.
