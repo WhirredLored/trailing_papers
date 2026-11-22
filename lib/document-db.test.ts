@@ -111,28 +111,66 @@ if (!SUPABASE_URL || !SERVICE_KEY) {
   })
 
   afterAll(async () => {
-    // Documents are immutable by trigger, so they must go first and by a path the
-    // trigger allows. There is none — which is the point of Law 8 — so the fixture
-    // company cannot be removed while its documents stand. Delete the rows that
-    // can go, and leave the rest reported rather than silently leaking.
-    for (const table of ['estimate_line', 'estimate'] as const) {
-      if (ids.companyA) await admin.from(table).delete().eq('company_id', ids.companyA)
-    }
-    if (ids.projectA) await admin.from('project').delete().eq('id', ids.projectA)
-    if (ids.propertyA) await admin.from('property').delete().eq('id', ids.propertyA)
-    if (ids.clientA) await admin.from('client').delete().eq('id', ids.clientA)
+    // Teardown order is forced by the schema, and every step here exists because
+    // its absence leaked rows into the live project on the first real run:
+    //
+    //  1. estimate.pdf_document_id references document(id) `on delete restrict`,
+    //     so estimates go BEFORE documents.
+    //  2. An issued estimate cannot be hard-deleted until deleted_at is set
+    //     (C08's retire-before-purge). Without the retire the DELETE is refused
+    //     and PostgREST reports an error nobody reads — the estimate survives.
+    //  3. Documents are immutable by trigger; purge_document() is the only path
+    //     the trigger allows (20261122000001), because the guard it sets must
+    //     share a transaction with the delete and PostgREST gives each call its
+    //     own.
+    //  4. document_counter rows are company-scoped too, and `company_id` is
+    //     `on delete restrict`, so they block the company just as documents do.
+    const failures: string[] = []
+    const companies = [ids.companyA, ids.companyB].filter(Boolean) as string[]
 
-    if (createdDocumentIds.length > 0) {
-      console.warn(
-        `[document-db.test] ${createdDocumentIds.length} document row(s) remain by design: ` +
-          `the freeze trigger refuses deletes (Law 8). Fixture companies ${ids.companyA} / ` +
-          `${ids.companyB} were left in place because their documents cannot be removed.`,
+    for (const company of companies) {
+      // 2 — retire issued estimates so they can be purged at all.
+      const retired = await admin
+        .from('estimate')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('company_id', company)
+        .is('deleted_at', null)
+      if (retired.error) failures.push(`retire estimates (${company}): ${retired.error.message}`)
+
+      // 1 — lines, then estimates, before any document can go.
+      for (const table of ['estimate_line', 'estimate'] as const) {
+        const { error } = await admin.from(table).delete().eq('company_id', company)
+        if (error) failures.push(`${table} (${company}): ${error.message}`)
+      }
+    }
+
+    // 3 — documents, each through the guarded purge path.
+    for (const documentId of createdDocumentIds) {
+      const { data, error } = await admin.rpc('purge_document', { p_document_id: documentId })
+      if (error) failures.push(`purge_document(${documentId}): ${error.message}`)
+      else if (data === 0) failures.push(`purge_document(${documentId}): matched no row`)
+    }
+
+    for (const company of companies) {
+      // 4 — counters, then the rest of the tenant, then the company itself.
+      for (const table of ['document_counter', 'project', 'property', 'client'] as const) {
+        const { error } = await admin.from(table).delete().eq('company_id', company)
+        if (error) failures.push(`${table} (${company}): ${error.message}`)
+      }
+    }
+
+    for (const company of companies) {
+      const { error } = await admin.from('company').delete().eq('id', company)
+      if (error) failures.push(`company (${company}): ${error.message}`)
+    }
+
+    // Fail loudly. A teardown that leaks quietly is how fixtures accumulate in a
+    // live project, and the whole reason the purge path above exists.
+    if (failures.length > 0) {
+      throw new Error(
+        `[document-db.test] teardown did not fully clean up — fixtures may remain in the live ` +
+          `project (companies ${companies.join(', ')}):\n  ${failures.join('\n  ')}`,
       )
-      return
-    }
-
-    for (const company of [ids.companyA, ids.companyB]) {
-      if (company) await admin.from('company').delete().eq('id', company)
     }
   })
 

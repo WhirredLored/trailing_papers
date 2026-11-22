@@ -742,3 +742,57 @@ AWAITING HUMAN:
   needs a worker run with the key to verify).
 - Remove the two orphaned PDFs via the Storage API or the dashboard.
 - `prompts/README.md` still lists C08 as `next` and C09 as `planned`; both have shipped.
+
+## C09 follow-up — the purge path wired into teardown, and a correction
+
+Wiring the purge path into `lib/document-db.test.ts` broke the design from the previous entry
+and found two more teardown bugs. All three are fixed here.
+
+THE DESIGN WAS UNREACHABLE. `20261122000000` requires `set_config('papertrail.purging', …)` and
+the `DELETE` to share a transaction. The suite talks to the database through the Supabase JS
+client, which goes via PostgREST, where **every call is its own transaction** — so the two can
+never see each other and the guard was unusable from the one caller it was built for. The
+previous entry's claim that no helper should exist "because it would have to be `security
+definer`" is **withdrawn**: it does not have to be. `20261122000001` adds
+`purge_document(uuid)` as SECURITY INVOKER (`prosecdef = false`, checked), which packages the
+two statements into one transaction while granting nobody a capability they lacked —
+service_role already had it, and an `authenticated` caller still meets RLS with no DELETE policy
+on `public.document`. EXECUTE is additionally revoked from `public`, `anon` and `authenticated`
+and granted only to `service_role`; verified with `has_function_privilege`: service_role true,
+authenticated false, anon false, and `document` still has 0 DELETE policies.
+
+TWO MORE TEARDOWN BUGS, both of which the live run's drift had already paid for:
+- **Issued estimates were never retired.** The teardown called `delete` on `estimate` directly,
+  which C08's trigger refuses for a non-draft row. PostgREST returned an error nobody read, so
+  the estimate survived — that is the `+2 estimates` in the previous entry's drift, and it was
+  never the documents' fault.
+- **`document_counter` was never cleaned.** Those rows are company-scoped with `company_id`
+  `on delete restrict`, so they block the company exactly as documents do — the `+12 counters`.
+
+The teardown now retires before purging, deletes in the order the schema forces (lines →
+estimates → documents via the RPC → counters → project/property/client → company), covers *both*
+fixture companies rather than only A, collects every failure, and **throws** if anything remains
+instead of warning. A teardown that leaks quietly is what let this accumulate for a whole run.
+
+TYPES. `purge_document` returns `integer`, so unlike the previous migration this one does change
+`gen types` output and the file had to be updated. It was updated by splicing, not rewritten —
+and the reason is worth recording, because writing the generator's output wholesale would have
+been a regression: a `generate_typescript_types` run for this project returns the **`public`
+schema only** (15 tables), while the committed file carries a `graphql_public` block too and
+pgcrypto's `dearmor` / `gen_random_uuid` / `gen_salt` / `pgp_armor_headers` (23 table blocks in
+all). Replacing the file would have deleted all of that. So the two real deltas were taken
+verbatim from the generator — the `purge_document` signature, placed alphabetically, and
+`PostgrestVersion` `14.5` → `14.17` — which is exactly the splice-and-verify approach C09 used
+and documented for the same reason. The stale PostgrestVersion recorded as outstanding two
+entries ago is now correct.
+
+VERIFIED: `purge_document`'s live body is byte-identical to the committed file (`md5(prosrc)` and
+an md5 of the file's `$fn$…$fn$` body both `9481239e…4648`, 531 bytes). `build` 0, `lint` 0,
+`typecheck` 0 — and typecheck passing is the real check on the splice, since it is what resolves
+`admin.rpc('purge_document', …)`. `test` reads `3 failed | 9 passed (12)` / 219 in this
+container, which is the credentials guard, not a regression.
+
+NOT VERIFIED: **the new teardown has not run.** That needs a session holding the service-role
+key; a worker run is queued and its result belongs in the next entry. Until it reports, the claim
+that the leak is fixed is a design argument, not an observation. The two orphaned PDFs from
+2026-10-02 are also still in the bucket.
