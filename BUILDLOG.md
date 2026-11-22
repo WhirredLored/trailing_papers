@@ -667,3 +667,78 @@ AWAITING HUMAN:
   because the suites read `process.env` rather than making a request.
 - Remove the two orphaned PDFs via the Storage API or the dashboard.
 - `prompts/README.md` still lists C08 as `next` and C09 as `planned`; both have shipped.
+
+## C09 follow-up — the M1 gate is green, and `document` gets a purge path
+
+THE GATE. With `SUPABASE_SERVICE_ROLE_KEY` finally present, the three credential-guarded suites
+collected and passed for the first time. Run in a worker session on the same cloud environment,
+against the live project, file counts quoted as CLAUDE.md asks:
+
+    npm run test:isolation     Test Files  1 passed (1)      Tests  27 passed
+    npm run test:estimates     Test Files  1 passed (1)      Tests  20 passed
+    npm run test:documents     Test Files  1 passed (1)      Tests  12 passed
+    npm run test               Test Files 12 passed (12)     Tests 278 passed
+
+**The M1 tenancy gate is green for the first time since C08**, and `test:documents` has now run
+somewhere at all, which it never had. The arithmetic is worth recording because it is what rules
+out the failure mode CLAUDE.md warns about: the previous full run was 219 tests over 9 of 12
+files; 219 + 27 + 20 + 12 = 278 and 9 + 3 = 12. Every file collects. No suite is silently absent.
+
+The key was validated before anything ran — `ref = ocghrrsotgprgrbvgyel`, `role = service_role`
+decoded from the JWT, plus a live authenticated request returning 200. A first attempt was
+aborted because the key configured then belonged to a different project; nothing was written by
+it, and the database was re-read afterwards to confirm that.
+
+THE DEFECT THE GATE EXPOSED. The runs leaked fixtures into the live project: +4 companies,
++2 estimates, +2 documents, +12 counters (doubled because the documents suite runs both
+standalone and inside the full run). `auth.users` was unaffected, so user teardown works.
+
+This is structural, not a sloppy teardown, and C09 predicted it: a document row cannot be
+deleted, and `document.company_id` is `on delete restrict`, so the company that owns a document
+can never be torn down. C09's own DECISIONS line says the cost "lands on test teardown, which
+cannot remove its own fixtures and says so rather than failing silently" — and it did say so,
+in stderr, rather than passing quietly. Left alone, every future run would strand more.
+
+THE FIX — `20261122000000_document_purge_path.sql`. C08 solved the same problem for estimates
+twice, and this copies the second pattern rather than the first. Retire-before-purge needs a
+`deleted_at` column, and C09 forbids one explicitly: `document` has no `deleted_at` and no
+`updated_at` on purpose, so adding one would mean permitting an UPDATE to the single table whose
+whole value is never being updated. Instead the trigger now admits a DELETE only when the exact
+document id has been named in `papertrail.purging` earlier in the same transaction — the same
+session-setting guard C08 already uses for `papertrail.issuing`. A purge is two deliberate
+statements; a single stray DELETE is still refused. No helper function was added, because a
+`security definer` purge function would bypass RLS for whoever could execute it.
+
+VERIFIED, each observed rather than assumed:
+- The live function body is **byte-identical to the committed file** — `md5(prosrc)` from
+  `pg_proc` and an md5 of the file's `$fn$…$fn$` body both give `4b41248880bf…208f`, 723 bytes.
+- An unguarded `delete from public.document` is still **refused** with `42501` and the new
+  message. The law still holds; this was checked before the purge path was used for anything.
+- An `update` is still refused **even with `papertrail.purging` set to that row's id** — the
+  guard unlocks DELETE only and widens nothing else. That is the claim the header makes, so it
+  was tested rather than asserted.
+- The leaked fixtures are gone and the project is back to its exact baseline: 2 companies,
+  2 estimates, 0 documents, 0 counters, 2 `auth.users`, 0 rows matching `c09-%`.
+- `gen types` output is unchanged by this migration, and that is checkable rather than hopeful:
+  functions returning `trigger` are not emitted into `types/supabase.ts` — `document_freeze`,
+  `set_updated_at` and `estimate_freeze_issued` all exist in the database and none appears in the
+  generated file, while `record_document` (returning `document`) does. This migration replaces a
+  trigger function body and adds no table, column, enum or callable function.
+
+NOT VERIFIED:
+- **The purge path is not wired into `lib/document-db.test.ts` teardown.** The migration makes
+  cleanup possible; the suite still does not do it, so the next run will leak again and need the
+  same manual purge. That change touches a currently-passing test file and cannot be verified
+  from a container without the service-role key, so it is left as the next step rather than done
+  blind.
+- The live suites were not re-run after this migration. It only narrows what `document_freeze`
+  refuses, and the suites never delete documents, so nothing in them should change — but that is
+  inference.
+- Storage is still untouched: the two orphaned PDFs from 2026-10-02 remain, and no browser has
+  served a C09 route.
+
+AWAITING HUMAN:
+- Decide whether to wire the purge path into the documents suite's teardown (recommended, and it
+  needs a worker run with the key to verify).
+- Remove the two orphaned PDFs via the Storage API or the dashboard.
+- `prompts/README.md` still lists C08 as `next` and C09 as `planned`; both have shipped.

@@ -94,15 +94,24 @@ feature — C03 for `company-assets`, C09 for `documents`.
 
 ## Outstanding
 
-All ten migrations are applied to the `Trailing_papers` project (ref `ocghrrsotgprgrbvgyel`),
+All eleven migrations are applied to the `Trailing_papers` project (ref `ocghrrsotgprgrbvgyel`),
 and both storage buckets exist with `documents` private, 25 MB, `application/pdf` only.
 
-What is still unproven is everything that needs the **service-role key**, which no session has
-had: `test:isolation` (the M1 tenancy gate), `test:estimates` and `test:documents` all guard
-their whole body on it and so define no suite without it — `npm run test` reports them as three
-failed _files_, not as skips. Add `SUPABASE_SERVICE_ROLE_KEY` as an environment variable on the
-cloud environment and they collect.
+**The M1 tenancy gate is green.** With `SUPABASE_SERVICE_ROLE_KEY` set on the cloud environment,
+all three live suites collect and pass: `test:isolation` 27, `test:estimates` 20,
+`test:documents` 12, and a full run is `12 passed (12)` files / 278 tests. A container without
+that key still reports three failed _files_ — that is the credentials guard, not a regression, and
+the file count is the tell.
 
-Two smaller items: two orphaned PDFs remain in the `documents` bucket from a 2026-10-02 test run
-whose tenants have been purged (`storage.objects` refuses direct SQL deletes, so they need the
-Storage API or the dashboard), and no browser has yet served a C09 route.
+What remains:
+
+- **`lib/document-db.test.ts` still leaks fixtures on every run.** A document row blocks its
+  company from being torn down, so each run strands ~2 companies, 1 estimate, 1 document and
+  6 counters. `20261122000000_document_purge_path.sql` now provides the way out — name the row in
+  `papertrail.purging` in the same transaction, then delete — but the suite's teardown does not
+  use it yet. Wiring it in is the fix; until then a run needs a manual purge.
+- Two orphaned PDFs remain in the `documents` bucket from a 2026-10-02 run whose tenants are
+  gone. `storage.objects` refuses direct SQL deletes, so they need the Storage API or the
+  dashboard.
+- No browser has served a C09 route. Storage upload/download is still unexercised — the DB suite
+  does not touch it.
