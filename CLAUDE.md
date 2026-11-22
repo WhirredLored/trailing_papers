@@ -37,7 +37,13 @@ npx supabase gen types typescript --linked > types/supabase.ts
 ```
 
 Skipping the regeneration makes every new table resolve to `never`, producing a wall
-of type errors that look like broken code but are not. The CLI is already linked.
+of type errors that look like broken code but are not.
+
+The CLI is linked in a local checkout, but **not in a fresh cloud container**: there is no
+`.env`, `db push` fails with `LegacyProjectNotLinkedError`, and the container's egress proxy
+carries HTTPS only, so Postgres on 5432 is unreachable even once the host is allowed. From a
+cloud session apply DDL with the Supabase MCP server instead, then record the history row under
+the version its repo file carries — that is the same gap `migration repair` exists to close.
 
 If a migration was applied by hand in the SQL editor, its history row is missing and
 `db push` will try to re-apply it — repair first:
@@ -88,7 +94,29 @@ feature — C03 for `company-assets`, C09 for `documents`.
 
 ## Outstanding
 
-`20260917000001_documents.sql` (C09) is **not applied**. The nine before it are, and both
-storage buckets exist. It was proven against a local Postgres rather than the hosted
-project, so apply it with `db push`, regenerate types in the same breath, then run
-`npm run test:documents` — that suite has never run anywhere.
+All eleven migrations are applied to the `Trailing_papers` project (ref `ocghrrsotgprgrbvgyel`),
+and both storage buckets exist with `documents` private, 25 MB, `application/pdf` only.
+
+**The M1 tenancy gate is green.** With `SUPABASE_SERVICE_ROLE_KEY` set on the cloud environment,
+all three live suites collect and pass: `test:isolation` 27, `test:estimates` 20,
+`test:documents` 12, and a full run is `12 passed (12)` files / 278 tests. A container without
+that key still reports three failed _files_ — that is the credentials guard, not a regression, and
+the file count is the tell.
+
+The suites also no longer leak. `lib/document-db.test.ts` used to strand a fixture tenant on
+every run, because a document row cannot be deleted and `company_id` is `on delete restrict`.
+`purge_document(uuid)` (migration `20261122000001`) is the only path the freeze trigger allows —
+it sets `papertrail.purging` and deletes in one transaction, which a PostgREST caller cannot do
+with two separate calls. Teardown uses it, and **throws** if anything is left behind. Verified by
+two consecutive runs that left the project bit-for-bit identical. Both storage buckets are empty.
+
+If you add a suite that writes `document` rows, tear them down through `purge_document` —
+a plain delete is refused, and the row will pin its company forever.
+
+What remains:
+
+- No browser has served a C09 route, and Storage upload/download is still unexercised — the DB
+  suite does not touch it. C08's lesson was that a browser pass caught a pricing defect every
+  other layer missed.
+- `prompts/README.md` still lists C08 as `next` and C09 as `planned`; both have shipped. It is
+  verbatim source material, so it is recorded here rather than edited.

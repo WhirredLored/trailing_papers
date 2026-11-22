@@ -522,3 +522,321 @@ AWAITING HUMAN: apply `20260917000001_documents.sql` with `npx supabase db push`
 in the same breath, then run `npm run test:documents` and `npm run test:isolation`. After that,
 issue an estimate in a browser and open the PDF — C08's lesson was that a browser pass found a
 pricing defect that every other layer had missed, and nothing here has been near a real request.
+## chore — package-lock.json resynced so a cold container can install
+
+A fresh session could not install at all. `npm ci` refused outright with `EUSAGE`:
+
+    npm ci can only install packages when your package.json and package-lock.json
+    are in sync. Please update your lock file with npm install before continuing.
+      Missing: @emnapi/runtime@1.11.3 from lock file
+      Missing: @emnapi/core@1.11.3 from lock file
+      Invalid: lock file's @emnapi/wasi-threads@1.2.1 does not satisfy @emnapi/wasi-threads@1.2.3
+
+That is a hard failure, not a warning — it exits before writing `node_modules`, so with no
+dependencies on disk every one of the four gates fails with `next: not found` and the repo
+looks broken for a reason that has nothing to do with its code. Worth recording because it
+costs a cold session its first ten minutes before any real work starts.
+
+WHAT CHANGED. `npm install` to let npm resolve and rewrite the tree, nothing more. The diff is
+48 insertions and 15 deletions confined to the `@emnapi/*` wasm shims
+(`core`, `runtime`, `wasi-threads`) that hang off `@unrs/resolver-binding-wasm32-wasi`, a
+transitive of ESLint's resolver. **No first-party dependency moved** — `package.json` is
+untouched, and no direct dependency changed version. These are optional wasm fallbacks that
+never load on this platform, which is why the drift went unnoticed: the previous session ran on
+a tree that was already installed.
+
+VERIFIED, in this order and all observed rather than assumed:
+- `npm ci` now exits 0 from a deleted `node_modules` — this is the actual claim of the commit,
+  so it was run rather than inferred from `npm install` having succeeded.
+- All four gates re-run against that fresh `npm ci` tree, not the `npm install` one:
+  `build` 0, `lint` 0, `typecheck` 0.
+- `test` is at the same **2 failed | 8 passed (10 files), 193 tests passed** the previous commit
+  recorded. Unchanged by this commit, and the file count is the check CLAUDE.md asks for.
+
+STILL NOT VERIFIED, carried forward unchanged from the previous commit. `lib/isolation.test.ts`
+and `lib/estimate-db.test.ts` define no suite without Supabase credentials, so vitest reports
+each as a failed file. **The M1 tenancy gate is therefore UNVERIFIED in this session** — last
+proven green at C08. Nothing here touches tenancy, but that is inference, not an observation.
+
+No PaperTrail Supabase project is reachable from this session either, so
+`20260917000000_storage_buckets.sql` remains unapplied and the `documents` bucket still does not
+exist. Of the four projects the account can see: two are INACTIVE (paused); `Sat_Early_Endeavor`
+is ACTIVE_HEALTHY but is the unrelated auction/marketplace schema; `color-pebble-hovel` is
+ACTIVE_HEALTHY but times out on every connection, so it could not be inspected and cannot be
+ruled out. A further probe of it was not possible — the Supabase MCP session dropped and asked
+for a re-authentication that cannot be performed from here.
+
+AWAITING HUMAN, unchanged and now blocking the next commit:
+- Point the session at a PaperTrail project (or authorise creating one and running all nine
+  migrations), then `npx supabase db push` and confirm both buckets exist and `documents` is
+  private. C09 writes PDFs into `documents`, so this stops being a loose end at the next commit.
+- `prompts/README.md` still lists C08 as `next` and C09 as `planned`; C08 shipped in b9d5a13.
+  Left alone deliberately — `prompts/` is verbatim source material under CLAUDE.md, so the
+  status table is not something this chore should edit on its own initiative.
+
+**Superseded in part.** Everything above was observed against the pre-C09 tree, before PR #3
+was merged and before Supabase was reachable. The "no project is reachable", "buckets
+unapplied" and AWAITING HUMAN lines were true when written and are not any more — see the next
+entry, which corrects each of them. The verification numbers above still stand as a record of
+that tree.
+
+## C09 adopted from PR #3, and the database reconciled to it
+
+Supabase became reachable for the first time, and what it revealed is the entry worth reading:
+**C09 existed twice, in two incompatible versions, and neither was on `main`.**
+
+WHY NO EARLIER SESSION FOUND THE PROJECT. It was never missing. `Trailing_papers`
+(ref `ocghrrsotgprgrbvgyel`) sits in a **different Supabase organisation** from the four
+projects earlier sessions enumerated, so every one of them concluded from a complete and
+correct listing that no PaperTrail project existed. A second obstacle sat behind it: this
+container's egress proxy refused `ocghrrsotgprgrbvgyel.supabase.co` and `api.supabase.com` with
+`403 connect_rejected`, because the cloud environment's allowlist was empty. A `trailing-papers`
+environment now allows the four Supabase hosts; both were confirmed answering afterwards.
+
+Two notes in this file were already stale and are withdrawn: `20260917000000_storage_buckets.sql`
+**was** applied (on 2026-10-02 — `documents` was created then), and both buckets exist with the
+declared settings. The AWAITING HUMAN line six commits carried was closed by someone, unrecorded.
+
+THE DIVERGENCE. PR #3 held a complete C09 (2920 lines, three commits, open since 2026-09-17,
+never merged) whose migration `20260917000001_documents.sql` had **never been applied** — it was
+proven against a local Postgres 16. Meanwhile the live database carried a migration recorded as
+`20260918000000_documents`, applied 2026-10-02, **whose source exists in no commit, no branch and
+no PR** — only as statements inside `supabase_migrations.schema_migrations`. The two were not a
+renumbering of each other:
+
+    PR #3                                  live database
+    document_counter                       document_number_counter
+    number, related_id, number_text        document_number, related_entity_id
+    document_freeze() trigger              (none)
+    lpad(n, greatest(4, length(n)), '0')   lpad(n, 4, '0')
+    record_document(), document_number_text()   (neither)
+
+The live version therefore carried the exact defect PR #3 documents finding and fixing — `lpad`
+truncates, so document 10000 prints as `EST-1000`, colliding with document 1000 — and had **no
+immutability trigger at all**, which is Law 3 unenforced on the table whose whole purpose is to
+be evidence. PR #3's TypeScript could not run against it either way. Adopting PR #3 was the
+instruction; this entry records what that cost.
+
+RECONCILIATION, in order, each step verified before the next:
+1. Dropped the orphan objects: the storage policy, `estimate_pdf_document_id_fkey` and its index,
+   `document` (2 rows), `document_number_counter`, `allocate_document_number`, `document_kind`.
+2. Purged leaked fixtures — two tenants both named *Document Generation Test Co LLC*, left by the
+   2026-10-02 run, teardown in FK order (retire the issued estimates with `deleted_at` first,
+   since C08's trigger refuses to purge a non-draft; then lines, estimates, projects, properties,
+   clients, app_users, `auth.users`, companies). This mattered beyond tidiness: both tenants' only
+   estimates held the sole non-null `pdf_document_id` values, and PR #3's foreign key could not be
+   added while they dangled. `dangling_ptrs` read 0 afterwards.
+3. Applied PR #3's migration. The SQL sent was **verified byte-identical to the committed file by
+   sha256** (`178dd9e9…7da4`) before any DDL ran, rather than retyped and hoped over.
+4. Repaired the history: deleted the `20260918000000` row and inserted `20260917000001`,
+   `documents`. The ten rows now match the ten files in `supabase/migrations/` exactly.
+
+VERIFIED afterwards: `document_number_text('estimate', 10000)` returns **`EST-10000`**, not the
+colliding `EST-1000`, and 1 → `EST-0001`, 7 → `INV-0007`, 42 → `SIG-0042`, so four is a floor and
+not a ceiling; the `document_freeze` trigger is present; both tables, all four functions, the
+`estimate_pdf_document_fkey` constraint and the storage policy exist; the orphan table is gone.
+`build` 0, `lint` 0, `typecheck` 0, and `test` at **3 failed | 9 passed (12 files), 219 passed** —
+the same numbers PR #3 recorded, so merging and reconciling moved nothing.
+
+A MISTAKE, recorded because it wrote to the live database. While probing, `allocate_document_number()`
+was called inside what was described as a read-only query. It is not read-only: it upserts. The
+counter was empty, so the call inserted a row and burned `EST-0001` for *Ridgeline Exteriors LLC*,
+the browsable demo tenant, with no document to show for it. It was reverted with a guarded delete
+(conditional on that company having no documents) and the counter confirmed back at 0 rows. No
+document row or PDF was touched. The lesson is narrow and worth keeping: in this schema the only
+safe function to call while looking around is `document_number_text()`, which is `immutable`.
+
+NOT VERIFIED, and precisely why:
+- **The M1 tenancy gate is still unproven, and has been since C08.** `test:isolation`,
+  `test:estimates` and `test:documents` guard their entire body on the service-role key, which
+  no session has ever had, so each defines no suite and vitest reports it as a failed *file* —
+  the file count, not the test count, is the tell. 219 tests passing is 9 files, not 12.
+- **Nothing has exercised Storage.** C09's upload and download paths remain untouched.
+- **No browser has served a C09 route.** C08's lesson was that a browser pass caught a pricing
+  defect every other layer missed; nothing here replaces that.
+- `types/supabase.ts` still reports `PostgrestVersion: "14.5"` from PR #3's local cluster where
+  the live project reports `14.17`. Left alone deliberately: the file is generated and CLAUDE.md
+  forbids hand-editing it, and a real `gen types --linked` cannot run from this container.
+- Two orphaned PDFs remain in the `documents` bucket under the purged tenants' folders.
+  `storage.objects` refuses direct SQL deletes (`storage.protect_delete()`), which also aborted
+  and rolled back the first teardown attempt — caught, re-run without that step, nothing lost.
+
+AWAITING HUMAN:
+- Add `SUPABASE_SERVICE_ROLE_KEY` as an environment variable on the cloud environment. It is the
+  one thing standing between this repo and a proven tenancy gate; it cannot be a network secret,
+  because the suites read `process.env` rather than making a request.
+- Remove the two orphaned PDFs via the Storage API or the dashboard.
+- `prompts/README.md` still lists C08 as `next` and C09 as `planned`; both have shipped.
+
+## C09 follow-up — the M1 gate is green, and `document` gets a purge path
+
+THE GATE. With `SUPABASE_SERVICE_ROLE_KEY` finally present, the three credential-guarded suites
+collected and passed for the first time. Run in a worker session on the same cloud environment,
+against the live project, file counts quoted as CLAUDE.md asks:
+
+    npm run test:isolation     Test Files  1 passed (1)      Tests  27 passed
+    npm run test:estimates     Test Files  1 passed (1)      Tests  20 passed
+    npm run test:documents     Test Files  1 passed (1)      Tests  12 passed
+    npm run test               Test Files 12 passed (12)     Tests 278 passed
+
+**The M1 tenancy gate is green for the first time since C08**, and `test:documents` has now run
+somewhere at all, which it never had. The arithmetic is worth recording because it is what rules
+out the failure mode CLAUDE.md warns about: the previous full run was 219 tests over 9 of 12
+files; 219 + 27 + 20 + 12 = 278 and 9 + 3 = 12. Every file collects. No suite is silently absent.
+
+The key was validated before anything ran — `ref = ocghrrsotgprgrbvgyel`, `role = service_role`
+decoded from the JWT, plus a live authenticated request returning 200. A first attempt was
+aborted because the key configured then belonged to a different project; nothing was written by
+it, and the database was re-read afterwards to confirm that.
+
+THE DEFECT THE GATE EXPOSED. The runs leaked fixtures into the live project: +4 companies,
++2 estimates, +2 documents, +12 counters (doubled because the documents suite runs both
+standalone and inside the full run). `auth.users` was unaffected, so user teardown works.
+
+This is structural, not a sloppy teardown, and C09 predicted it: a document row cannot be
+deleted, and `document.company_id` is `on delete restrict`, so the company that owns a document
+can never be torn down. C09's own DECISIONS line says the cost "lands on test teardown, which
+cannot remove its own fixtures and says so rather than failing silently" — and it did say so,
+in stderr, rather than passing quietly. Left alone, every future run would strand more.
+
+THE FIX — `20261122000000_document_purge_path.sql`. C08 solved the same problem for estimates
+twice, and this copies the second pattern rather than the first. Retire-before-purge needs a
+`deleted_at` column, and C09 forbids one explicitly: `document` has no `deleted_at` and no
+`updated_at` on purpose, so adding one would mean permitting an UPDATE to the single table whose
+whole value is never being updated. Instead the trigger now admits a DELETE only when the exact
+document id has been named in `papertrail.purging` earlier in the same transaction — the same
+session-setting guard C08 already uses for `papertrail.issuing`. A purge is two deliberate
+statements; a single stray DELETE is still refused. No helper function was added, because a
+`security definer` purge function would bypass RLS for whoever could execute it.
+
+VERIFIED, each observed rather than assumed:
+- The live function body is **byte-identical to the committed file** — `md5(prosrc)` from
+  `pg_proc` and an md5 of the file's `$fn$…$fn$` body both give `4b41248880bf…208f`, 723 bytes.
+- An unguarded `delete from public.document` is still **refused** with `42501` and the new
+  message. The law still holds; this was checked before the purge path was used for anything.
+- An `update` is still refused **even with `papertrail.purging` set to that row's id** — the
+  guard unlocks DELETE only and widens nothing else. That is the claim the header makes, so it
+  was tested rather than asserted.
+- The leaked fixtures are gone and the project is back to its exact baseline: 2 companies,
+  2 estimates, 0 documents, 0 counters, 2 `auth.users`, 0 rows matching `c09-%`.
+- `gen types` output is unchanged by this migration, and that is checkable rather than hopeful:
+  functions returning `trigger` are not emitted into `types/supabase.ts` — `document_freeze`,
+  `set_updated_at` and `estimate_freeze_issued` all exist in the database and none appears in the
+  generated file, while `record_document` (returning `document`) does. This migration replaces a
+  trigger function body and adds no table, column, enum or callable function.
+
+NOT VERIFIED:
+- **The purge path is not wired into `lib/document-db.test.ts` teardown.** The migration makes
+  cleanup possible; the suite still does not do it, so the next run will leak again and need the
+  same manual purge. That change touches a currently-passing test file and cannot be verified
+  from a container without the service-role key, so it is left as the next step rather than done
+  blind.
+- The live suites were not re-run after this migration. It only narrows what `document_freeze`
+  refuses, and the suites never delete documents, so nothing in them should change — but that is
+  inference.
+- Storage is still untouched: the two orphaned PDFs from 2026-10-02 remain, and no browser has
+  served a C09 route.
+
+AWAITING HUMAN:
+- Decide whether to wire the purge path into the documents suite's teardown (recommended, and it
+  needs a worker run with the key to verify).
+- Remove the two orphaned PDFs via the Storage API or the dashboard.
+- `prompts/README.md` still lists C08 as `next` and C09 as `planned`; both have shipped.
+
+## C09 follow-up — the purge path wired into teardown, and a correction
+
+Wiring the purge path into `lib/document-db.test.ts` broke the design from the previous entry
+and found two more teardown bugs. All three are fixed here.
+
+THE DESIGN WAS UNREACHABLE. `20261122000000` requires `set_config('papertrail.purging', …)` and
+the `DELETE` to share a transaction. The suite talks to the database through the Supabase JS
+client, which goes via PostgREST, where **every call is its own transaction** — so the two can
+never see each other and the guard was unusable from the one caller it was built for. The
+previous entry's claim that no helper should exist "because it would have to be `security
+definer`" is **withdrawn**: it does not have to be. `20261122000001` adds
+`purge_document(uuid)` as SECURITY INVOKER (`prosecdef = false`, checked), which packages the
+two statements into one transaction while granting nobody a capability they lacked —
+service_role already had it, and an `authenticated` caller still meets RLS with no DELETE policy
+on `public.document`. EXECUTE is additionally revoked from `public`, `anon` and `authenticated`
+and granted only to `service_role`; verified with `has_function_privilege`: service_role true,
+authenticated false, anon false, and `document` still has 0 DELETE policies.
+
+TWO MORE TEARDOWN BUGS, both of which the live run's drift had already paid for:
+- **Issued estimates were never retired.** The teardown called `delete` on `estimate` directly,
+  which C08's trigger refuses for a non-draft row. PostgREST returned an error nobody read, so
+  the estimate survived — that is the `+2 estimates` in the previous entry's drift, and it was
+  never the documents' fault.
+- **`document_counter` was never cleaned.** Those rows are company-scoped with `company_id`
+  `on delete restrict`, so they block the company exactly as documents do — the `+12 counters`.
+
+The teardown now retires before purging, deletes in the order the schema forces (lines →
+estimates → documents via the RPC → counters → project/property/client → company), covers *both*
+fixture companies rather than only A, collects every failure, and **throws** if anything remains
+instead of warning. A teardown that leaks quietly is what let this accumulate for a whole run.
+
+TYPES. `purge_document` returns `integer`, so unlike the previous migration this one does change
+`gen types` output and the file had to be updated. It was updated by splicing, not rewritten —
+and the reason is worth recording, because writing the generator's output wholesale would have
+been a regression: a `generate_typescript_types` run for this project returns the **`public`
+schema only** (15 tables), while the committed file carries a `graphql_public` block too and
+pgcrypto's `dearmor` / `gen_random_uuid` / `gen_salt` / `pgp_armor_headers` (23 table blocks in
+all). Replacing the file would have deleted all of that. So the two real deltas were taken
+verbatim from the generator — the `purge_document` signature, placed alphabetically, and
+`PostgrestVersion` `14.5` → `14.17` — which is exactly the splice-and-verify approach C09 used
+and documented for the same reason. The stale PostgrestVersion recorded as outstanding two
+entries ago is now correct.
+
+VERIFIED: `purge_document`'s live body is byte-identical to the committed file (`md5(prosrc)` and
+an md5 of the file's `$fn$…$fn$` body both `9481239e…4648`, 531 bytes). `build` 0, `lint` 0,
+`typecheck` 0 — and typecheck passing is the real check on the splice, since it is what resolves
+`admin.rpc('purge_document', …)`. `test` reads `3 failed | 9 passed (12)` / 219 in this
+container, which is the credentials guard, not a regression.
+
+NOT VERIFIED: **the new teardown has not run.** That needs a session holding the service-role
+key; a worker run is queued and its result belongs in the next entry. Until it reports, the claim
+that the leak is fixed is a design argument, not an observation. The two orphaned PDFs from
+2026-10-02 are also still in the bucket.
+
+## C09 follow-up — the teardown fix verified, and the bucket emptied
+
+The previous entry's claim was a design argument. It has now been run, in a session holding the
+service-role key, and the result is observed rather than inferred.
+
+ZERO DRIFT. The same count query was taken before the runs, after `test:documents`, and again
+after a full `npm run test`. All three are identical:
+
+    companies=2  estimates=2  documents=0  counters=0  users=2  fixtures=0
+
+That is the baseline exactly, on every column, in both directions. No stranded `c09-%` company.
+The teardown's new throw-on-incomplete-cleanup path never fired, because there was nothing left
+to report. Verified independently from this session afterwards, against the same project, with
+the same numbers — plus `purge_document` present and 12 history rows matching the 12 migration
+files on disk.
+
+    npm run test:documents    Test Files  1 passed (1)       Tests  12 passed (12)
+    npm run test              Test Files 12 passed (12)      Tests 278 passed (278)
+
+**`lib/document-db.test.ts` no longer leaks.** Two consecutive runs left the live project
+bit-for-bit identical, where one run previously stranded 4 companies, 2 estimates, 2 documents
+and 12 counters.
+
+STORAGE IS NOW CLEAN. The two PDFs orphaned on 2026-10-02 were removed through the Storage API
+with the service-role key — `storage.objects` refuses direct SQL deletes, which is what made this
+a hand step. Both returned HTTP 200, and the result was checked three ways: SQL says 0 objects in
+every bucket, a Storage API listing of `documents` returns `[]`, and a direct GET of each path now
+404s. Confirmed from this session too: 0 objects across all buckets. Only those two paths were
+targeted.
+
+ONE DOCUMENTATION WART, deliberately not fixed. `20261122000000_document_purge_path.sql` still
+says in its header "No helper function is added on purpose", which `20261122000001` then
+contradicts by adding one. Applied migrations are never edited, so the correction lives in the
+newer migration's header (which withdraws the claim explicitly and says why) and in DECISIONS,
+not by rewriting history. Worth knowing before that header misleads someone the way C03's one
+wrong sentence did for six commits.
+
+VERIFIED: nothing was edited, committed or schema-changed by the verification run; it reported a
+clean tree at `ac4572d`.
+
+AWAITING HUMAN: a browser pass on C09 — issue an estimate and open the generated PDF. Storage
+upload and download have still never served a request, and C08's browser pass is what caught a
+pricing defect every other layer of verification had missed.
