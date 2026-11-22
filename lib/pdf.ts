@@ -211,6 +211,12 @@ export function sanitizeForPdf(input: string): string {
     .replace(/[‘’‚‛]/g, "'")
     .replace(/[“”„‟]/g, '"')
     .replace(/[–—−]/g, '-')
+    // The takeoff engine's own output, not pasted input: buildDerivation() writes
+    // "= 4.07 → 5 squares" on every assembly-derived line (lib/takeoff.ts). U+2192
+    // is outside WinAnsi, so without this it reached the client as "= 4.07 ? 5
+    // squares" — which reads as mojibake and, worse, destroys the one thing the
+    // derivation exists to say: that 4.07 was rounded up to 5.
+    .replace(/→/g, '->')
     .replace(/…/g, '...')
     .replace(/ /g, ' ')
     .replace(/[•·]/g, '-')

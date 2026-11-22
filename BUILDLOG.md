@@ -852,3 +852,104 @@ rather than assumed, and they agree.
 
 VERIFIED: `build` 0, `lint` 0, `typecheck` 0; `test` unchanged at `3 failed | 9 passed (12)` /
 219 passed in a container without the service-role key, which is the credentials guard.
+
+## C09 browser pass — one client-facing defect found and fixed, four more recorded
+
+C08's lesson repeated itself exactly. Every layer of verification passed C09 — 278 tests, four
+green gates, byte-identical determinism, a hash check on every download — and the first time
+anyone looked at a rendered page, the body was wrong.
+
+WHAT RAN, against the live project with the demo tenant. Sign-in; the project's estimate tab;
+**Path A**, the retry route on issued v1 which had no document (`POST /api/estimate/:id/document`
+→ 201, `EST-0001`); **Path B**, issuing draft v2 so the snapshot is taken automatically
+(`POST …/issue` → 200, `EST-0002`, `document_error: null`); downloading both through the
+session-authorized proxy (200, `content-type: application/pdf`, body hashing to the
+`x-document-sha256` header); and rendering both to PNG and **looking at them**. A 300×100 PNG was
+also uploaded through the real `/settings/company` UI → `POST /api/company/logo` 200, so the
+letterhead logo branch rendered for the first time, and `company-assets` served its first object.
+
+THE DOCUMENT IS GOOD. Single page, 612×792 Letter, correct legal name (not the DEMO display
+name), address and contact, logo at the right aspect ratio, CLIENT and PROPERTY blocks, grouped
+line items, totals, deposit, terms, signature block, footer "Page 1 of 1". Nothing clipped,
+nothing overlapping, nothing off the page, no blank where a number belongs. Metadata carries
+`CreationDate = issued_at`, not generation time, which is what makes the hash stable.
+
+**THE DEFECT: every takeoff derivation printed `?` where the engine wrote `→`.** On the page:
+
+    20 lin ft × 1 = 20 lin ft × 1.10 waste = 22 ? 25 lin ft (pkg of 12.5)
+
+`sanitizeForPdf()` folds curly quotes, en/em dashes, ellipsis, nbsp, bullets, ™, ® and °, then
+turns anything outside `0x20–0x7e` / `0xa0–0xff` into `?`. `×` and `÷` are Latin-1 and survive;
+`→` (U+2192) is not. And `→` is **not pasted input** — `buildDerivation()` in `lib/takeoff.ts`
+writes it on every assembly-derived line (lines 268 and 271), and `lib/estimate.test.ts:411`
+asserts it verbatim. So this fired on the happy path, on every assembly line, of every estimate
+PDF ever generated.
+
+Worse than cosmetic: `= 22 ? 25 lin ft` no longer says the 22 was **rounded up to** 25, which is
+the only thing the derivation exists to say. The audit trail C09 is built to produce was being
+destroyed in the one artifact a client actually sees.
+
+WHY EVERY LAYER MISSED IT. `lib/pdf.test.ts` tested `sanitizeForPdf` against an en-dash, a curly
+quote, ™, ° and an emoji — all characters a *supplier* sends. It never tested the character
+*this app writes itself*. The fix is one line; the regression test is the point, so two were
+added: the literal derivation string, and a structural one that runs the real `computeTakeoff()`
+output through the real `sanitizeForPdf()` and asserts no `?` survives, so the next
+unrepresentable glyph added to a derivation fails in CI instead of on a client's estimate.
+
+VERIFIED, first-hand in this session rather than relayed. The credentials finally reached this
+container, and Node's `fetch` ignores `HTTPS_PROXY`, so `NODE_USE_ENV_PROXY=1` is what lets the
+live suites run here at all — worth knowing, because without it they fail with `ENOTFOUND` and
+look like a broken project:
+
+- Both new tests **fail without the fix** and pass with it (the fix was stashed to confirm).
+- `npm run test:isolation` → `Test Files 1 passed (1)`, `Tests 27 passed` — **the M1 gate, run
+  and observed here, not taken from a worker's report.**
+- `npm run test` → `Test Files 12 passed (12)`, `Tests 280 passed` (278 + the 2 new).
+- `build` 0, `lint` 0, `typecheck` 0. Typecheck earned its keep: the first draft of the new
+  fixture invented a `catalogItemId` field that `TakeoffComponent` does not have. The tests
+  passed at runtime; `tsc` caught it.
+- Zero leaked fixtures afterwards: 2 companies, 0 `c09-%`, 2 estimates, 2 users. The teardown fix
+  from the previous entry now confirmed from a second, independent container.
+
+A CONSEQUENCE OF THE FIX, measured rather than assumed. Changing the renderer changes the bytes,
+so the two documents generated during the browser pass no longer re-render to their stored hash:
+
+    EST-0001  stored=d8083f86af66dfd0  rerender=ebd7c8c6547d2668  matches=false
+    EST-0002  stored=9dbea9f9c7a71ac8  rerender=b6d90ced581ff415  matches=false
+
+Nothing is broken by this. The download route hashes the **stored bytes** and compares them to
+the stored hash — those still agree, so tamper evidence and every download still work. But
+`rehashEstimateDocument()` compares a fresh render, and that is only meaningful within one
+renderer version. Anyone treating it as absolute will get a false positive after any deliberate
+rendering change. The two demo documents are pre-fix artifacts; they can be purged with
+`purge_document` and regenerated if the demo should be self-consistent, at the cost of burning
+EST-0003/EST-0004, since numbers are never reused.
+
+FOUR MORE FINDINGS, NOT FIXED — each is a product decision rather than a defect in what C09's
+spec asks for, so they are recorded here instead of changed unilaterally:
+
+1. **C09 has no UI at all.** Nothing in `pages/` or `components/` references `/api/document/` or
+   `/api/estimate/[id]/document` — only the route files themselves. An issued estimate offers
+   "Back to project / Itemized / Summary / Create revision" and nothing else. A contractor can
+   issue an estimate and has **no way to see, download or send the PDF**; both routes are
+   reachable only by hand-crafting an HTTP request. The spec asks for "download endpoints
+   authorized by session", which exist and work — so this is arguably spec-complete and
+   product-incomplete at the same time.
+2. **The tax line cannot be reconciled from the page.** It prints `Subtotal 244.74`,
+   `Tax (8.75%) 15.73`, `Total 260.47`. 244.74 × 8.75% is 21.41, not 15.73, because the taxable
+   base is 179.74 — the $65 labour line is not taxed, which is correct — but the taxable base is
+   never disclosed. Every number is right and every number reconciles internally; the one
+   labelled "(8.75%)" simply invites a phone call, on a document whose purpose is to be
+   defensible.
+3. **The optional line states no amount.** `Gutter guards, rear elevation | 40 | lin_ft | 6.50 |
+   optional` — the AMOUNT column reads "optional". Excluding it from the total is deliberate and
+   footnoted, but its own price, 40 × 6.50 = $260.00, appears nowhere, and that is more than the
+   whole job total. The biggest piece of missing money on the page.
+4. **The UNIT column prints the raw enum slug**, `lin_ft`, while the derivation two lines below
+   says `lin ft`. Same unit, two spellings, and the underscored one faces the client.
+
+ALSO STILL UNEXERCISED: the licence/insurance letterhead branch, because those fields are NULL on
+the demo tenant and inventing data to light up a code path proves nothing.
+
+AWAITING HUMAN: which of the four above to take. The UI gap is the one that decides whether C09
+is usable by a real contractor, and C10's share links assume a document a client can be sent.
