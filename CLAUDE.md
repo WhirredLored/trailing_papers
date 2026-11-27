@@ -94,7 +94,7 @@ feature — C03 for `company-assets`, C09 for `documents`.
 
 ## Outstanding
 
-All eleven migrations are applied to the `Trailing_papers` project (ref `ocghrrsotgprgrbvgyel`),
+All twelve migrations are applied to the `Trailing_papers` project (ref `ocghrrsotgprgrbvgyel`),
 and both storage buckets exist with `documents` private, 25 MB, `application/pdf` only.
 
 **The M1 tenancy gate is green.** With `SUPABASE_SERVICE_ROLE_KEY` set on the cloud environment,

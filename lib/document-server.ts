@@ -191,6 +191,20 @@ export function buildEstimateDocumentModel(input: EstimateDocumentInput): Docume
     totals.push({ label: 'Discount', amountCents: -estimate.discount_cents })
   }
   if (estimate.tax_cents !== 0 || estimate.tax_rate_bp !== 0) {
+    // Disclose the base the tax was actually charged on, whenever it differs
+    // from what the client can see. Labour is commonly untaxed, so a reader
+    // doing subtotal × rate gets a bigger number than the one printed and has
+    // no way to tell why — on a document whose whole purpose is to be
+    // defensible, that is a phone call. Omitted when everything is taxable,
+    // since then the row would just repeat the subtotal.
+    const afterDiscount = estimate.subtotal_cents - estimate.discount_cents
+    if (estimate.taxable_subtotal_cents !== afterDiscount) {
+      totals.push({
+        label: 'Taxable subtotal',
+        amountCents: estimate.taxable_subtotal_cents,
+      })
+    }
+
     totals.push({
       label: `Tax (${formatBasisPoints(estimate.tax_rate_bp)}%)`,
       amountCents: estimate.tax_cents,

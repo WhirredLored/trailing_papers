@@ -75,6 +75,7 @@ VERIFIED: `npm run build` ✅, `npm run lint` ✅. (Tests will pass once SQL is 
 
 RESOLVED 2026-09-08 — applied via `supabase db push` after repairing the migration history (commit 6e4a070).
 Was: paste `20260904000001_company_profile.sql` and `20260904000002_clients_properties_projects.sql` into the SQL editor.
+
 ## C05 — feat(money): add integer-cents money utilities and pure totals engine
 
 `lib/money.ts` expanded from C01 placeholder to full integer-cents module: `parseCents` (string
@@ -111,7 +112,6 @@ No type errors in C06 files (pre-existing C04 type issues remain, unrelated).
 RESOLVED 2026-09-08 — applied via `supabase db push` after repairing the migration history (commit 6e4a070).
 Was: paste `20260905000000_catalog.sql` into the SQL editor.
 To load sample data: `npx tsx scripts/seed-catalog.ts <your-company-uuid>`.
-
 
 ## fix — tenancy gate repair and database typing
 
@@ -236,21 +236,22 @@ the live project through the SERVICE-ROLE client — which bypasses RLS entirely
 refuses these writes is the trigger and nothing else. `npm run test:estimates` runs it alone.
 
 VERIFIED, 20 cases, all observed passing:
-  - Issuing froze the expected totals onto the row ($1,335.00 subtotal, $65.63 tax on the one
-    taxable line, $1,400.63 total, $1,005.00 cost, $330.00 margin).
-  - An issued estimate refuses: a change to its notes, a change to its total, adding a line,
-    editing a line, deleting a line, deleting the estimate, a status flip back to draft, and
-    a save through `save_estimate_draft`. It still allows issued → approved.
-  - A draft refuses a hand-written `status = 'issued'` that bypasses `issue_estimate()`, and
-    stays editable afterwards.
-  - The revision flow: v1 clones to a v2 draft with its lines copied; v1 stays `approved`
-    with a null supersede pointer while v2 is still a draft; asking for a revision twice
-    returns the same v2 (idempotent); revising a draft is refused; revising with the wrong
-    company id is refused; v2 is editable and re-prices; issuing v2 flips v1 to `superseded`
-    with `superseded_by_estimate_id` set, and v1 keeps its own frozen totals; issuing v2 a
-    second time changes nothing (idempotent).
-  - Retire before purge: deleting an issued estimate is refused, setting `deleted_at` then
-    deleting succeeds, and the lines go with it.
+
+- Issuing froze the expected totals onto the row ($1,335.00 subtotal, $65.63 tax on the one
+  taxable line, $1,400.63 total, $1,005.00 cost, $330.00 margin).
+- An issued estimate refuses: a change to its notes, a change to its total, adding a line,
+  editing a line, deleting a line, deleting the estimate, a status flip back to draft, and
+  a save through `save_estimate_draft`. It still allows issued → approved.
+- A draft refuses a hand-written `status = 'issued'` that bypasses `issue_estimate()`, and
+  stays editable afterwards.
+- The revision flow: v1 clones to a v2 draft with its lines copied; v1 stays `approved`
+  with a null supersede pointer while v2 is still a draft; asking for a revision twice
+  returns the same v2 (idempotent); revising a draft is refused; revising with the wrong
+  company id is refused; v2 is editable and re-prices; issuing v2 flips v1 to `superseded`
+  with `superseded_by_estimate_id` set, and v1 keeps its own frozen totals; issuing v2 a
+  second time changes nothing (idempotent).
+- Retire before purge: deleting an issued estimate is refused, setting `deleted_at` then
+  deleting succeeds, and the lines go with it.
 
 Teardown verified: zero rows in every domain table and zero auth users afterwards, across two
 consecutive full-suite runs.
@@ -497,20 +498,20 @@ numbering pages 1-3.
 
 NOT VERIFIED, and precisely why:
 
-  - **The migration is not applied to the hosted project.** It applies cleanly to a local
-    Postgres 16 with all ten migrations in order; the project runs Postgres 17 and is unreachable
-    from this session. Nothing here is version-specific, but that is inference.
-  - **Nothing has touched Supabase Storage.** Upload, download and the `documents` bucket's RLS
-    policy are unexercised — there is no Storage in a bare Postgres. The policy is a copy of
-    C03's proven `company-assets` shape against the same `storage.foldername(name))[1]` idiom.
-  - **`lib/document-db.test.ts` has never run.** It is the supabase-js-mediated version of the
-    numbering, immutability and tenancy checks, and needs credentials. The behaviours it asserts
-    were each proven directly in SQL as described above; what is unproven is that they survive
-    the PostgREST round trip. `npm run test:documents` runs it.
-  - **No browser has seen any of this.** No route has served a request.
-  - `npm run test` now reports **3 failed | 9 passed (12 files)** — the third being this new
-    live-database suite, failing to collect for the same missing-credentials reason as the other
-    two. Check the FILE count, per CLAUDE.md.
+- **The migration is not applied to the hosted project.** It applies cleanly to a local
+  Postgres 16 with all ten migrations in order; the project runs Postgres 17 and is unreachable
+  from this session. Nothing here is version-specific, but that is inference.
+- **Nothing has touched Supabase Storage.** Upload, download and the `documents` bucket's RLS
+  policy are unexercised — there is no Storage in a bare Postgres. The policy is a copy of
+  C03's proven `company-assets` shape against the same `storage.foldername(name))[1]` idiom.
+- **`lib/document-db.test.ts` has never run.** It is the supabase-js-mediated version of the
+  numbering, immutability and tenancy checks, and needs credentials. The behaviours it asserts
+  were each proven directly in SQL as described above; what is unproven is that they survive
+  the PostgREST round trip. `npm run test:documents` runs it.
+- **No browser has seen any of this.** No route has served a request.
+- `npm run test` now reports **3 failed | 9 passed (12 files)** — the third being this new
+  live-database suite, failing to collect for the same missing-credentials reason as the other
+  two. Check the FILE count, per CLAUDE.md.
 
 `types/supabase.ts` was regenerated by a real `supabase gen types` run against the local cluster
 rather than hand-edited. That cluster cannot know the project's `graphql_public` schema or its
@@ -522,6 +523,7 @@ AWAITING HUMAN: apply `20260917000001_documents.sql` with `npx supabase db push`
 in the same breath, then run `npm run test:documents` and `npm run test:isolation`. After that,
 issue an estimate in a browser and open the PDF — C08's lesson was that a browser pass found a
 pricing defect that every other layer had missed, and nothing here has been near a real request.
+
 ## chore — package-lock.json resynced so a cold container can install
 
 A fresh session could not install at all. `npm ci` refused outright with `EUSAGE`:
@@ -546,6 +548,7 @@ never load on this platform, which is why the drift went unnoticed: the previous
 a tree that was already installed.
 
 VERIFIED, in this order and all observed rather than assumed:
+
 - `npm ci` now exits 0 from a deleted `node_modules` — this is the actual claim of the commit,
   so it was run rather than inferred from `npm install` having succeeded.
 - All four gates re-run against that fresh `npm ci` tree, not the `npm install` one:
@@ -567,6 +570,7 @@ ruled out. A further probe of it was not possible — the Supabase MCP session d
 for a re-authentication that cannot be performed from here.
 
 AWAITING HUMAN, unchanged and now blocking the next commit:
+
 - Point the session at a PaperTrail project (or authorise creating one and running all nine
   migrations), then `npx supabase db push` and confirm both buckets exist and `documents` is
   private. C09 writes PDFs into `documents`, so this stops being a loose end at the next commit.
@@ -618,9 +622,10 @@ be evidence. PR #3's TypeScript could not run against it either way. Adopting PR
 instruction; this entry records what that cost.
 
 RECONCILIATION, in order, each step verified before the next:
+
 1. Dropped the orphan objects: the storage policy, `estimate_pdf_document_id_fkey` and its index,
    `document` (2 rows), `document_number_counter`, `allocate_document_number`, `document_kind`.
-2. Purged leaked fixtures — two tenants both named *Document Generation Test Co LLC*, left by the
+2. Purged leaked fixtures — two tenants both named _Document Generation Test Co LLC_, left by the
    2026-10-02 run, teardown in FK order (retire the issued estimates with `deleted_at` first,
    since C08's trigger refuses to purge a non-draft; then lines, estimates, projects, properties,
    clients, app_users, `auth.users`, companies). This mattered beyond tidiness: both tenants' only
@@ -640,16 +645,17 @@ the same numbers PR #3 recorded, so merging and reconciling moved nothing.
 
 A MISTAKE, recorded because it wrote to the live database. While probing, `allocate_document_number()`
 was called inside what was described as a read-only query. It is not read-only: it upserts. The
-counter was empty, so the call inserted a row and burned `EST-0001` for *Ridgeline Exteriors LLC*,
+counter was empty, so the call inserted a row and burned `EST-0001` for _Ridgeline Exteriors LLC_,
 the browsable demo tenant, with no document to show for it. It was reverted with a guarded delete
 (conditional on that company having no documents) and the counter confirmed back at 0 rows. No
 document row or PDF was touched. The lesson is narrow and worth keeping: in this schema the only
 safe function to call while looking around is `document_number_text()`, which is `immutable`.
 
 NOT VERIFIED, and precisely why:
+
 - **The M1 tenancy gate is still unproven, and has been since C08.** `test:isolation`,
   `test:estimates` and `test:documents` guard their entire body on the service-role key, which
-  no session has ever had, so each defines no suite and vitest reports it as a failed *file* —
+  no session has ever had, so each defines no suite and vitest reports it as a failed _file_ —
   the file count, not the test count, is the tell. 219 tests passing is 9 files, not 12.
 - **Nothing has exercised Storage.** C09's upload and download paths remain untouched.
 - **No browser has served a C09 route.** C08's lesson was that a browser pass caught a pricing
@@ -662,6 +668,7 @@ NOT VERIFIED, and precisely why:
   and rolled back the first teardown attempt — caught, re-run without that step, nothing lost.
 
 AWAITING HUMAN:
+
 - Add `SUPABASE_SERVICE_ROLE_KEY` as an environment variable on the cloud environment. It is the
   one thing standing between this repo and a proven tenancy gate; it cannot be a network secret,
   because the suites read `process.env` rather than making a request.
@@ -710,6 +717,7 @@ statements; a single stray DELETE is still refused. No helper function was added
 `security definer` purge function would bypass RLS for whoever could execute it.
 
 VERIFIED, each observed rather than assumed:
+
 - The live function body is **byte-identical to the committed file** — `md5(prosrc)` from
   `pg_proc` and an md5 of the file's `$fn$…$fn$` body both give `4b41248880bf…208f`, 723 bytes.
 - An unguarded `delete from public.document` is still **refused** with `42501` and the new
@@ -726,6 +734,7 @@ VERIFIED, each observed rather than assumed:
   trigger function body and adds no table, column, enum or callable function.
 
 NOT VERIFIED:
+
 - **The purge path is not wired into `lib/document-db.test.ts` teardown.** The migration makes
   cleanup possible; the suite still does not do it, so the next run will leak again and need the
   same manual purge. That change touches a currently-passing test file and cannot be verified
@@ -738,6 +747,7 @@ NOT VERIFIED:
   served a C09 route.
 
 AWAITING HUMAN:
+
 - Decide whether to wire the purge path into the documents suite's teardown (recommended, and it
   needs a worker run with the key to verify).
 - Remove the two orphaned PDFs via the Storage API or the dashboard.
@@ -762,6 +772,7 @@ and granted only to `service_role`; verified with `has_function_privilege`: serv
 authenticated false, anon false, and `document` still has 0 DELETE policies.
 
 TWO MORE TEARDOWN BUGS, both of which the live run's drift had already paid for:
+
 - **Issued estimates were never retired.** The teardown called `delete` on `estimate` directly,
   which C08's trigger refuses for a non-draft row. PostgREST returned an error nobody read, so
   the estimate survived — that is the `+2 estimates` in the previous entry's drift, and it was
@@ -770,7 +781,7 @@ TWO MORE TEARDOWN BUGS, both of which the live run's drift had already paid for:
   `on delete restrict`, so they block the company exactly as documents do — the `+12 counters`.
 
 The teardown now retires before purging, deletes in the order the schema forces (lines →
-estimates → documents via the RPC → counters → project/property/client → company), covers *both*
+estimates → documents via the RPC → counters → project/property/client → company), covers _both_
 fixture companies rather than only A, collects every failure, and **throws** if anything remains
 instead of warning. A teardown that leaks quietly is what let this accumulate for a whole run.
 
@@ -840,3 +851,221 @@ clean tree at `ac4572d`.
 AWAITING HUMAN: a browser pass on C09 — issue an estimate and open the generated PDF. Storage
 upload and download have still never served a request, and C08's browser pass is what caught a
 pricing defect every other layer of verification had missed.
+
+## docs — migration count corrected from eleven to twelve
+
+A one-word fix, recorded because this repo has twice paid for a single wrong sentence left
+standing in its own instructions. The previous entry's CLAUDE.md update said "all eleven
+migrations are applied"; it was written before `20261122000001_purge_document_rpc.sql` existed
+and the count was never revisited. `supabase/migrations/` holds twelve `.sql` files (plus
+`.gitkeep`), and `supabase_migrations.schema_migrations` holds twelve rows — both counts observed
+rather than assumed, and they agree.
+
+VERIFIED: `build` 0, `lint` 0, `typecheck` 0; `test` unchanged at `3 failed | 9 passed (12)` /
+219 passed in a container without the service-role key, which is the credentials guard.
+
+## C09 browser pass — one client-facing defect found and fixed, four more recorded
+
+C08's lesson repeated itself exactly. Every layer of verification passed C09 — 278 tests, four
+green gates, byte-identical determinism, a hash check on every download — and the first time
+anyone looked at a rendered page, the body was wrong.
+
+WHAT RAN, against the live project with the demo tenant. Sign-in; the project's estimate tab;
+**Path A**, the retry route on issued v1 which had no document (`POST /api/estimate/:id/document`
+→ 201, `EST-0001`); **Path B**, issuing draft v2 so the snapshot is taken automatically
+(`POST …/issue` → 200, `EST-0002`, `document_error: null`); downloading both through the
+session-authorized proxy (200, `content-type: application/pdf`, body hashing to the
+`x-document-sha256` header); and rendering both to PNG and **looking at them**. A 300×100 PNG was
+also uploaded through the real `/settings/company` UI → `POST /api/company/logo` 200, so the
+letterhead logo branch rendered for the first time, and `company-assets` served its first object.
+
+THE DOCUMENT IS GOOD. Single page, 612×792 Letter, correct legal name (not the DEMO display
+name), address and contact, logo at the right aspect ratio, CLIENT and PROPERTY blocks, grouped
+line items, totals, deposit, terms, signature block, footer "Page 1 of 1". Nothing clipped,
+nothing overlapping, nothing off the page, no blank where a number belongs. Metadata carries
+`CreationDate = issued_at`, not generation time, which is what makes the hash stable.
+
+**THE DEFECT: every takeoff derivation printed `?` where the engine wrote `→`.** On the page:
+
+    20 lin ft × 1 = 20 lin ft × 1.10 waste = 22 ? 25 lin ft (pkg of 12.5)
+
+`sanitizeForPdf()` folds curly quotes, en/em dashes, ellipsis, nbsp, bullets, ™, ® and °, then
+turns anything outside `0x20–0x7e` / `0xa0–0xff` into `?`. `×` and `÷` are Latin-1 and survive;
+`→` (U+2192) is not. And `→` is **not pasted input** — `buildDerivation()` in `lib/takeoff.ts`
+writes it on every assembly-derived line (lines 268 and 271), and `lib/estimate.test.ts:411`
+asserts it verbatim. So this fired on the happy path, on every assembly line, of every estimate
+PDF ever generated.
+
+Worse than cosmetic: `= 22 ? 25 lin ft` no longer says the 22 was **rounded up to** 25, which is
+the only thing the derivation exists to say. The audit trail C09 is built to produce was being
+destroyed in the one artifact a client actually sees.
+
+WHY EVERY LAYER MISSED IT. `lib/pdf.test.ts` tested `sanitizeForPdf` against an en-dash, a curly
+quote, ™, ° and an emoji — all characters a _supplier_ sends. It never tested the character
+_this app writes itself_. The fix is one line; the regression test is the point, so two were
+added: the literal derivation string, and a structural one that runs the real `computeTakeoff()`
+output through the real `sanitizeForPdf()` and asserts no `?` survives, so the next
+unrepresentable glyph added to a derivation fails in CI instead of on a client's estimate.
+
+VERIFIED, first-hand in this session rather than relayed. The credentials finally reached this
+container, and Node's `fetch` ignores `HTTPS_PROXY`, so `NODE_USE_ENV_PROXY=1` is what lets the
+live suites run here at all — worth knowing, because without it they fail with `ENOTFOUND` and
+look like a broken project:
+
+- Both new tests **fail without the fix** and pass with it (the fix was stashed to confirm).
+- `npm run test:isolation` → `Test Files 1 passed (1)`, `Tests 27 passed` — **the M1 gate, run
+  and observed here, not taken from a worker's report.**
+- `npm run test` → `Test Files 12 passed (12)`, `Tests 280 passed` (278 + the 2 new).
+- `build` 0, `lint` 0, `typecheck` 0. Typecheck earned its keep: the first draft of the new
+  fixture invented a `catalogItemId` field that `TakeoffComponent` does not have. The tests
+  passed at runtime; `tsc` caught it.
+- Zero leaked fixtures afterwards: 2 companies, 0 `c09-%`, 2 estimates, 2 users. The teardown fix
+  from the previous entry now confirmed from a second, independent container.
+
+A CONSEQUENCE OF THE FIX, measured rather than assumed. Changing the renderer changes the bytes,
+so the two documents generated during the browser pass no longer re-render to their stored hash:
+
+    EST-0001  stored=d8083f86af66dfd0  rerender=ebd7c8c6547d2668  matches=false
+    EST-0002  stored=9dbea9f9c7a71ac8  rerender=b6d90ced581ff415  matches=false
+
+Nothing is broken by this. The download route hashes the **stored bytes** and compares them to
+the stored hash — those still agree, so tamper evidence and every download still work. But
+`rehashEstimateDocument()` compares a fresh render, and that is only meaningful within one
+renderer version. Anyone treating it as absolute will get a false positive after any deliberate
+rendering change. The two demo documents are pre-fix artifacts; they can be purged with
+`purge_document` and regenerated if the demo should be self-consistent, at the cost of burning
+EST-0003/EST-0004, since numbers are never reused.
+
+FOUR MORE FINDINGS, NOT FIXED — each is a product decision rather than a defect in what C09's
+spec asks for, so they are recorded here instead of changed unilaterally:
+
+1. **C09 has no UI at all.** Nothing in `pages/` or `components/` references `/api/document/` or
+   `/api/estimate/[id]/document` — only the route files themselves. An issued estimate offers
+   "Back to project / Itemized / Summary / Create revision" and nothing else. A contractor can
+   issue an estimate and has **no way to see, download or send the PDF**; both routes are
+   reachable only by hand-crafting an HTTP request. The spec asks for "download endpoints
+   authorized by session", which exist and work — so this is arguably spec-complete and
+   product-incomplete at the same time.
+2. **The tax line cannot be reconciled from the page.** It prints `Subtotal 244.74`,
+   `Tax (8.75%) 15.73`, `Total 260.47`. 244.74 × 8.75% is 21.41, not 15.73, because the taxable
+   base is 179.74 — the $65 labour line is not taxed, which is correct — but the taxable base is
+   never disclosed. Every number is right and every number reconciles internally; the one
+   labelled "(8.75%)" simply invites a phone call, on a document whose purpose is to be
+   defensible.
+3. **The optional line states no amount.** `Gutter guards, rear elevation | 40 | lin_ft | 6.50 |
+optional` — the AMOUNT column reads "optional". Excluding it from the total is deliberate and
+   footnoted, but its own price, 40 × 6.50 = $260.00, appears nowhere, and that is more than the
+   whole job total. The biggest piece of missing money on the page.
+4. **The UNIT column prints the raw enum slug**, `lin_ft`, while the derivation two lines below
+   says `lin ft`. Same unit, two spellings, and the underscored one faces the client.
+
+ALSO STILL UNEXERCISED: the licence/insurance letterhead branch, because those fields are NULL on
+the demo tenant and inventing data to light up a code path proves nothing.
+
+AWAITING HUMAN: which of the four above to take. The UI gap is the one that decides whether C09
+is usable by a real contractor, and C10's share links assume a document a client can be sent.
+
+## C09 browser-pass findings — the document now says what it means
+
+Three of the four findings recorded in the previous entry were defects in what the client reads.
+All three are fixed here; the fourth, the missing UI, is the commit after this one.
+
+**The taxable base is now disclosed.** The page printed `Subtotal 244.74` and `Tax (8.75%) 15.73`,
+and 244.74 × 8.75% is 21.41. Every figure was correct — labour is untaxed, so the real base was
+179.74 — but the base was never stated, so the document could not be reconciled by the person it
+is written for. A `Taxable subtotal` row now appears directly above the tax it explains, and only
+when it differs from the post-discount subtotal: a row that always restated the line above would
+be noise on a client-facing page.
+
+**Optional lines state their price.** The amount column printed the word `optional` _instead of_ a
+figure, so the cost of the upsell appeared nowhere on an itemized document — here, $260.00,
+which is more than the entire job total of $260.47. The amount is now printed in soft ink and the
+description carries the marker (`Optional — Gutter guards…`), so the meaning still survives a
+grayscale print and nothing depends on noticing a shade. This also completed dead code: line 568
+read `index === 0 && line.isOptional ? \`${text}\` : text`, whose two branches were identical —
+someone intended to mark the description and never finished.
+
+Worth recording that the finding as relayed was **overstated**, and checking it rather than
+repeating it is what caught that: `drawSummaryGroups` already prints
+`optional additions available: $X`. The amount was disclosed in _summary_ documents and missing
+only from _itemized_ ones — the two detail levels disagreed. They now agree.
+
+**Units read as units.** The UNIT column printed the stored enum slug `lin_ft` while the
+derivation two lines below said `lin ft`: one unit, two spellings, the underscored one facing the
+client. `unitLabel()` is a rule, not a lookup table, so a unit added to the enum later formats
+correctly without anyone remembering this file.
+
+TESTS. `buildEstimateDocumentModel` — the pure function that turns stored rows into everything a
+client reads — had **no coverage at all**, which is how two of these reached a rendered page. It
+now has a suite: the taxable row appears when the base differs, sits immediately before the tax
+it explains, is omitted when everything is taxable, and compares against the post-discount base
+rather than the raw subtotal. Plus `unitLabel` and the optional-line amount. The two tax tests
+were confirmed to **fail without the fix** (the change was stashed to check).
+
+VERIFIED IN A BROWSER, by issuing a real revision rather than reasoning about the renderer. v3 was
+created and issued through the UI against the live project, generating EST-0003, which was
+downloaded and read:
+
+    J-channel      25  lin ft    0.89     22.25
+      20 lin ft × 1 = 20 lin ft × 1.10 waste = 22 -> 25 lin ft (pkg of 12.5)
+    Optional - Gutter guards, rear elevation   40  lin ft   6.50    260.00
+                                      Subtotal          244.74
+                               Taxable subtotal         179.74
+                                   Tax (8.75%)           15.73
+                                         Total          260.47
+
+179.74 × 8.75% = 15.73, so the document reconciles from its own face. Layout intact: single page,
+columns aligned, nothing clipped. `build` 0, `lint` 0, `typecheck` 0, `test` 13 files / 289.
+
+NOT VERIFIED: the licence/insurance letterhead branch is still unexercised (those fields are NULL
+on the demo tenant). The em-dash in `Optional —` renders as `-`, which is `sanitizeForPdf` folding
+correctly, not a defect.
+
+## C09 — the client PDF is reachable from the app
+
+The last finding from the browser pass, and the one that decided whether C09 worked at all:
+**nothing in the app called either document route.** `grep` over `pages/` and `components/`
+returned only the route files themselves. A contractor could issue an estimate and had no way to
+see, download or send the PDF; both endpoints were reachable only by hand-crafting an HTTP
+request. C09's spec asks for "download endpoints authorized by session", and those existed and
+worked — so the commit was spec-complete and product-unusable at the same time.
+
+WHAT WAS ADDED. A "Client PDF" panel on an issued estimate: the document number, when it was
+generated, its size, and **View PDF** / **Download**. When no document exists — which only
+happens if generation failed after the estimate was already frozen — the panel offers
+**Generate PDF** instead and says why it might be missing. The nested document is fetched with
+the estimate rather than in a second round trip, the same additive-select move C08 used for
+`catalog_item.kind`.
+
+**It could not be a link, and that is the interesting part.** `requireUser` authorises on
+`Authorization: Bearer`, not a cookie, so `<a href="/api/document/…">` or `window.open` would
+arrive unauthenticated and 401. The route also proxies the bytes deliberately rather than handing
+out a signed URL that would outlive the session. So the handler fetches with the token and hands
+the browser a blob. `authHeaders()` now returns a concrete type instead of `HeadersInit`, so the
+PDF fetch can take the Authorization header without a cast and without sending a JSON
+content-type on a GET.
+
+Issuing also told the user nothing before this — the page simply re-rendered as frozen while a
+document had in fact been created. The panel now shows it immediately.
+
+VERIFIED IN A BROWSER against the live project, driven end to end:
+
+- The panel renders on issued v2: `EST-0002 · generated 11/22/2026 · 6 KB`, with both buttons.
+- **Download** produced a real file named `EST-0002.pdf` — which is the proof the blob path
+  authenticates, since the bearer-only route would have refused a plain link.
+- Creating a revision and issuing it through the UI generated **EST-0003** automatically, and the
+  panel surfaced it on the spot.
+
+`build` 0, `lint` 0, `typecheck` 0, `test` 13 files / 289. The project is clean afterwards:
+2 companies, 0 leaked fixtures, documents EST-0001/0002/0003, estimates `1:superseded,
+2:superseded, 3:issued` — correct revision behaviour.
+
+NOT VERIFIED: the **Generate PDF** branch renders but was never clicked, because the state cannot
+be reached on demand. A document referenced by an issued estimate cannot be purged
+(`estimate_pdf_document_fkey` is `on delete restrict`) and the pointer cannot be cleared (the
+estimate freeze trigger refuses it), so "issued but no document" only arises from a real
+generation failure. The POST route behind the button is the one the earlier pass drove to 201.
+
+AWAITING HUMAN: nothing blocking. C10 adds the client-facing half — a tokenised share link with
+access logging — beside this staff-facing panel; it was deliberately not improvised here, because
+Law 7 wants that access logged and the table for it arrives with C10.

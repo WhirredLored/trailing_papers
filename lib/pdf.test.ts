@@ -5,11 +5,13 @@ import {
   formatDateStable,
   renderDocumentPdf,
   sanitizeForPdf,
+  unitLabel,
   wrapText,
   type DocumentLineRow,
   type DocumentModel,
 } from '@/lib/pdf'
 import { formatCentsStable } from '@/lib/money'
+import { computeTakeoff, type TakeoffAssembly } from '@/lib/takeoff'
 
 /**
  * C09 acceptance: a 30-line estimate with a long address renders correctly, and
@@ -144,12 +146,95 @@ describe('sanitizeForPdf', () => {
     expect(sanitizeForPdf('45° pitch…')).toBe('45 deg pitch...')
   })
 
+  it('folds the arrow the takeoff engine emits, rather than printing "?"', () => {
+    // Regression. This is not pasted input: buildDerivation() in lib/takeoff.ts
+    // writes U+2192 on every assembly-derived line, and it is outside WinAnsi, so
+    // it used to reach the client as "4.07 ? 5 squares". The derivation exists to
+    // show that 4.07 was rounded UP to 5; "?" destroys exactly that.
+    expect(sanitizeForPdf('370 sq ft ÷ 100 = 3.7 sq × 1.10 waste = 4.07 → 5 squares')).toBe(
+      '370 sq ft ÷ 100 = 3.7 sq × 1.10 waste = 4.07 -> 5 squares',
+    )
+    expect(sanitizeForPdf('22 → 25 lin ft (pkg of 12.5)')).not.toContain('?')
+  })
+
+  it('leaves no "?" in any derivation the takeoff engine can produce', () => {
+    // The structural version of the test above, and the one that would have caught
+    // it: the unit tests covered characters a SUPPLIER sends, never the characters
+    // this app writes itself. Run the real engine's output through the real
+    // sanitiser so the next unrepresentable glyph added to a derivation fails here
+    // instead of on a client's estimate.
+    // One component per rounding rule, since each writes a different derivation
+    // shape and only up_to_package appends the "(pkg of …)" tail.
+    const assembly: TakeoffAssembly = {
+      name: 'Vinyl siding, per 100 sq ft',
+      driverUnit: 'sq ft',
+      components: [
+        {
+          name: 'Siding squares',
+          unit: 'sq',
+          quantityPerDriver: 0.01,
+          wastePercentBp: 1000,
+          roundingRule: 'up_to_unit',
+          packageSize: 1,
+          unitCostCents: 11249,
+        },
+        {
+          name: 'J-channel',
+          unit: 'lin ft',
+          quantityPerDriver: 1,
+          wastePercentBp: 1000,
+          roundingRule: 'up_to_package',
+          packageSize: 12.5,
+          unitCostCents: 89,
+        },
+        {
+          name: 'Lead installer',
+          unit: 'hour',
+          quantityPerDriver: 0.05,
+          wastePercentBp: 0,
+          roundingRule: 'exact',
+          packageSize: 1,
+          unitCostCents: 6500,
+        },
+      ],
+    }
+
+    const result = computeTakeoff(assembly, 370)
+    expect(result.components.length).toBe(3)
+
+    for (const component of result.components) {
+      expect(component.derivation).not.toBe('')
+      expect(sanitizeForPdf(component.derivation)).not.toContain('?')
+    }
+  })
+
   it('replaces characters outside WinAnsi rather than throwing', () => {
     expect(sanitizeForPdf('siding \u{1F528} install')).toBe('siding ? install')
   })
 
   it('flattens newlines and tabs so a cell cannot escape its row', () => {
     expect(sanitizeForPdf('line one\nline two\tend')).toBe('line one line two end')
+  })
+})
+
+describe('unitLabel', () => {
+  it('spells stored enum slugs the way a client reads them', () => {
+    // The UNIT column printed `lin_ft` while the derivation two lines below
+    // said `lin ft` — one unit, two spellings, underscore facing the client.
+    expect(unitLabel('lin_ft')).toBe('lin ft')
+    expect(unitLabel('sq_ft')).toBe('sq ft')
+  })
+
+  it('leaves units that need no change alone', () => {
+    for (const unit of ['ea', 'sq', 'hour', 'day', 'load']) {
+      expect(unitLabel(unit)).toBe(unit)
+    }
+  })
+
+  it('handles a unit added to the enum later without being extended', () => {
+    // A rule, not a lookup table: the point is that nobody has to remember this
+    // file when the enum grows.
+    expect(unitLabel('board_ft')).toBe('board ft')
   })
 })
 
