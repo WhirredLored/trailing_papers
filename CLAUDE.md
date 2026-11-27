@@ -113,10 +113,23 @@ two consecutive runs that left the project bit-for-bit identical. Both storage b
 If you add a suite that writes `document` rows, tear them down through `purge_document` —
 a plain delete is refused, and the row will pin its company forever.
 
+**C09 has been driven in a browser** and Storage is exercised in both directions: a logo
+uploaded through `/settings/company` into `company-assets`, PDFs written into `documents` by
+generation, and bytes read back through the session-authorized download route. That pass found
+four defects in the rendered document that every other layer had passed, all since fixed.
+
+If you change `lib/pdf.ts`, remember the renderer's bytes are the evidence: a deliberate change
+makes every existing document report `matches=false` from `rehashEstimateDocument()`, which
+compares a fresh render. That is expected and not tamper evidence — the authoritative check is
+the download route's, which hashes the _stored_ bytes against the stored hash.
+
 What remains:
 
-- No browser has served a C09 route, and Storage upload/download is still unexercised — the DB
-  suite does not touch it. C08's lesson was that a browser pass caught a pricing defect every
-  other layer missed.
+- The **licence/insurance letterhead branch** has still never rendered: those fields are NULL on
+  the demo tenant, and inventing data to light up a code path proves nothing.
+- The **Generate PDF** button on an issued estimate renders but has never been clicked. That
+  state cannot be reached on demand — a document referenced by an issued estimate cannot be
+  purged (`on delete restrict`) and its pointer cannot be cleared (the freeze trigger refuses
+  it) — so it only arises from a real generation failure.
 - `prompts/README.md` still lists C08 as `next` and C09 as `planned`; both have shipped. It is
   verbatim source material, so it is recorded here rather than edited.
