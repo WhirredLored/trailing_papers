@@ -40,7 +40,13 @@ async function getEstimate(req: NextApiRequest, res: NextApiResponse) {
 
   const { data: estimate, error } = await db
     .from('estimate')
-    .select('*, project:project_id ( id, title, property:property_id ( address_line1 ) )')
+    // The document is nested so an issued estimate can offer its PDF without a
+    // second round trip. Additive, and inert for every existing caller — the
+    // same reasoning as C08 adding catalog_item.kind to the assembly select.
+    .select(
+      '*, project:project_id ( id, title, property:property_id ( address_line1 ) ),' +
+        ' document:pdf_document_id ( id, number_text, generated_at, byte_size )',
+    )
     .eq('id', id)
     .eq('company_id', caller.companyId)
     .is('deleted_at', null)

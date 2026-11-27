@@ -63,7 +63,14 @@ type EstimateRow = {
   expires_at: string | null
   superseded_by_estimate_id: string | null
   revised_from_estimate_id: string | null
+  pdf_document_id: string | null
   project?: { id: string; title: string; property?: { address_line1: string } | null } | null
+  document?: {
+    id: string
+    number_text: string
+    generated_at: string
+    byte_size: number
+  } | null
 }
 
 type LineRow = {
@@ -231,7 +238,15 @@ function formatBp(bp: number): string {
   return `${(bp / 100).toFixed(2).replace(/\.00$/, '')}%`
 }
 
-async function authHeaders(): Promise<HeadersInit | null> {
+/**
+ * Concrete return type rather than HeadersInit: a caller that needs only the
+ * Authorization header — the PDF fetch, which must not send a JSON
+ * Content-Type — can read it without casting.
+ */
+async function authHeaders(): Promise<{
+  Authorization: string
+  'Content-Type': string
+} | null> {
   const {
     data: { session },
   } = await getBrowserClient().auth.getSession()
@@ -485,6 +500,81 @@ export default function EstimateBuilderPage() {
       return
     }
     router.push(`/estimates/${body.estimate.id}`)
+  }
+
+  // ─── document ────────────────────────────────────────────────────────────
+  // C09 generates and stores the PDF but shipped with nothing calling either
+  // route, so an issued estimate had no way to reach its own document. These
+  // two handlers are that missing surface. Client-facing delivery — a tokenised
+  // link with access logging — is C10's and deliberately not improvised here.
+
+  const generateDocument = async () => {
+    if (typeof id !== 'string') return
+    setSaving(true)
+    setError(null)
+    setMessage(null)
+
+    const headers = await authHeaders()
+    if (!headers) {
+      setError('Your session expired. Sign in again.')
+      setSaving(false)
+      return
+    }
+
+    const res = await fetch(`/api/estimate/${id}/document`, { method: 'POST', headers })
+    const body = await res.json().catch(() => ({ error: 'Could not generate the PDF.' }))
+    setSaving(false)
+    if (!res.ok) {
+      setError(body.error ?? 'Could not generate the PDF.')
+      return
+    }
+    setMessage(
+      body.created === false
+        ? `${body.document?.number_text ?? 'The PDF'} already exists — this version is frozen, so it was not regenerated.`
+        : `${body.document?.number_text ?? 'PDF'} generated.`,
+    )
+    await load()
+  }
+
+  /**
+   * Fetch the PDF and hand the browser the bytes.
+   *
+   * It cannot be a plain link. The download route authorises with
+   * `Authorization: Bearer`, not a cookie, so an <a href> or window.open would
+   * arrive unauthenticated and 401 — and the route proxies the bytes on purpose
+   * rather than issuing a signed URL that would outlive the session.
+   */
+  const openDocument = async (mode: 'view' | 'download') => {
+    const document = estimate?.document
+    if (!document) return
+    setError(null)
+
+    const headers = await authHeaders()
+    if (!headers) {
+      setError('Your session expired. Sign in again.')
+      return
+    }
+
+    const res = await fetch(`/api/document/${document.id}`, {
+      headers: { Authorization: headers.Authorization },
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ error: 'Could not fetch the PDF.' }))
+      setError(body.error ?? 'Could not fetch the PDF.')
+      return
+    }
+
+    const url = URL.createObjectURL(await res.blob())
+    if (mode === 'download') {
+      const anchor = window.document.createElement('a')
+      anchor.href = url
+      anchor.download = `${document.number_text}.pdf`
+      anchor.click()
+    } else {
+      window.open(url, '_blank', 'noopener')
+    }
+    // Give the tab time to take the blob before the handle is released.
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
   }
 
   // ─── render ──────────────────────────────────────────────────────────────
@@ -1193,6 +1283,58 @@ export default function EstimateBuilderPage() {
         <section className="est-section est-actions">
           {readOnly ? (
             <>
+              <div className="est-document">
+                <h3 className="est-document-title">Client PDF</h3>
+                {estimate.document ? (
+                  <>
+                    <p className="est-document-meta">
+                      <strong>{estimate.document.number_text}</strong> · generated{' '}
+                      {new Date(estimate.document.generated_at).toLocaleDateString()} ·{' '}
+                      {Math.max(1, Math.round(estimate.document.byte_size / 1024))} KB
+                    </p>
+                    <div className="est-document-actions">
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => openDocument('view')}
+                      >
+                        View PDF
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => openDocument('download')}
+                      >
+                        Download
+                      </button>
+                    </div>
+                    <p className="field-hint">
+                      This is the exact file the client sees, frozen when the estimate was issued.
+                      Its contents are verified against a stored hash each time it is fetched.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="est-document-meta">No PDF has been generated for this version.</p>
+                    <div className="est-document-actions">
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={generateDocument}
+                        disabled={saving}
+                      >
+                        {saving ? 'Working…' : 'Generate PDF'}
+                      </button>
+                    </div>
+                    <p className="field-hint">
+                      Issuing normally takes the snapshot automatically. A missing one means
+                      generation failed after the estimate was already frozen — generating it now
+                      produces the same document, because the content it renders cannot change.
+                    </p>
+                  </>
+                )}
+              </div>
+
               <button type="button" className="btn-primary" onClick={revise} disabled={saving}>
                 {saving ? 'Working…' : 'Create revision'}
               </button>

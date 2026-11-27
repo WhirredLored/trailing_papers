@@ -1020,3 +1020,52 @@ columns aligned, nothing clipped. `build` 0, `lint` 0, `typecheck` 0, `test` 13 
 NOT VERIFIED: the licence/insurance letterhead branch is still unexercised (those fields are NULL
 on the demo tenant). The em-dash in `Optional —` renders as `-`, which is `sanitizeForPdf` folding
 correctly, not a defect.
+
+## C09 — the client PDF is reachable from the app
+
+The last finding from the browser pass, and the one that decided whether C09 worked at all:
+**nothing in the app called either document route.** `grep` over `pages/` and `components/`
+returned only the route files themselves. A contractor could issue an estimate and had no way to
+see, download or send the PDF; both endpoints were reachable only by hand-crafting an HTTP
+request. C09's spec asks for "download endpoints authorized by session", and those existed and
+worked — so the commit was spec-complete and product-unusable at the same time.
+
+WHAT WAS ADDED. A "Client PDF" panel on an issued estimate: the document number, when it was
+generated, its size, and **View PDF** / **Download**. When no document exists — which only
+happens if generation failed after the estimate was already frozen — the panel offers
+**Generate PDF** instead and says why it might be missing. The nested document is fetched with
+the estimate rather than in a second round trip, the same additive-select move C08 used for
+`catalog_item.kind`.
+
+**It could not be a link, and that is the interesting part.** `requireUser` authorises on
+`Authorization: Bearer`, not a cookie, so `<a href="/api/document/…">` or `window.open` would
+arrive unauthenticated and 401. The route also proxies the bytes deliberately rather than handing
+out a signed URL that would outlive the session. So the handler fetches with the token and hands
+the browser a blob. `authHeaders()` now returns a concrete type instead of `HeadersInit`, so the
+PDF fetch can take the Authorization header without a cast and without sending a JSON
+content-type on a GET.
+
+Issuing also told the user nothing before this — the page simply re-rendered as frozen while a
+document had in fact been created. The panel now shows it immediately.
+
+VERIFIED IN A BROWSER against the live project, driven end to end:
+
+- The panel renders on issued v2: `EST-0002 · generated 11/22/2026 · 6 KB`, with both buttons.
+- **Download** produced a real file named `EST-0002.pdf` — which is the proof the blob path
+  authenticates, since the bearer-only route would have refused a plain link.
+- Creating a revision and issuing it through the UI generated **EST-0003** automatically, and the
+  panel surfaced it on the spot.
+
+`build` 0, `lint` 0, `typecheck` 0, `test` 13 files / 289. The project is clean afterwards:
+2 companies, 0 leaked fixtures, documents EST-0001/0002/0003, estimates `1:superseded,
+2:superseded, 3:issued` — correct revision behaviour.
+
+NOT VERIFIED: the **Generate PDF** branch renders but was never clicked, because the state cannot
+be reached on demand. A document referenced by an issued estimate cannot be purged
+(`estimate_pdf_document_fkey` is `on delete restrict`) and the pointer cannot be cleared (the
+estimate freeze trigger refuses it), so "issued but no document" only arises from a real
+generation failure. The POST route behind the button is the one the earlier pass drove to 201.
+
+AWAITING HUMAN: nothing blocking. C10 adds the client-facing half — a tokenised share link with
+access logging — beside this staff-facing panel; it was deliberately not improvised here, because
+Law 7 wants that access logged and the table for it arrives with C10.
