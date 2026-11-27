@@ -235,6 +235,21 @@ export function sanitizeForPdf(input: string): string {
 }
 
 /**
+ * Render a unit for a human rather than for the database.
+ *
+ * The stored units are enum slugs — `sq_ft`, `lin_ft` — and printing them raw
+ * put `lin_ft` in the client-facing UNIT column while the derivation two lines
+ * below said `lin ft`: the same unit spelled two ways on one page, with the
+ * underscored one facing the client.
+ *
+ * A rule rather than a lookup table, so a unit added to the enum later is
+ * formatted correctly without anyone remembering to extend a map here.
+ */
+export function unitLabel(unit: string): string {
+  return unit.replace(/_/g, ' ')
+}
+
+/**
  * Break text to fit `maxWidth`, measuring against the real font metrics.
  *
  * This is what satisfies "no clipped columns on long descriptions". A word longer
@@ -567,7 +582,10 @@ function drawItemizedLines(
     const rowTop = cursor.y
 
     descLines.forEach((text, index) => {
-      const label = index === 0 && line.isOptional ? `${text}` : text
+      // The optional marker rides on the description, not on a colour, so it
+      // survives a grayscale print — and so the amount column is free to state
+      // what the option actually costs.
+      const label = index === 0 && line.isOptional ? `Optional — ${text}` : text
       drawText(cursor, label, COL.descLeft, SIZE_BODY, fonts.regular)
       cursor.y -= LEADING - 1
     })
@@ -581,13 +599,24 @@ function drawItemizedLines(
     const numbersY = cursor.y
     cursor.y = rowTop
     drawRight(cursor, line.quantity, COL.qtyRight, SIZE_BODY, fonts.regular)
-    drawText(cursor, line.unit, COL.unitLeft, SIZE_BODY, fonts.regular)
+    drawText(cursor, unitLabel(line.unit), COL.unitLeft, SIZE_BODY, fonts.regular)
     drawRight(cursor, formatCentsStable(line.unitPriceCents), COL.priceRight, SIZE_BODY, fonts.regular)
 
+    // Optional lines state their price too. Printing only the word "optional"
+    // left the client unable to see what the upsell costs without multiplying
+    // it out themselves — and the figure can exceed the job total. It is set in
+    // soft ink, and the description already says "Optional —", so nothing about
+    // its exclusion from the total depends on noticing the shade.
     if (line.isOptional) {
       sawOptional = true
-      // Grayscale-safe: the word carries the meaning, not a colour.
-      drawRight(cursor, 'optional', COL.amountRight, SIZE_SMALL, fonts.regular, INK_SOFT)
+      drawRight(
+        cursor,
+        formatCentsStable(line.amountCents),
+        COL.amountRight,
+        SIZE_BODY,
+        fonts.regular,
+        INK_SOFT,
+      )
     } else {
       drawRight(cursor, formatCentsStable(line.amountCents), COL.amountRight, SIZE_BODY, fonts.regular)
     }

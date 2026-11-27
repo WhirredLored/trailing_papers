@@ -5,6 +5,7 @@ import {
   formatDateStable,
   renderDocumentPdf,
   sanitizeForPdf,
+  unitLabel,
   wrapText,
   type DocumentLineRow,
   type DocumentModel,
@@ -213,6 +214,27 @@ describe('sanitizeForPdf', () => {
 
   it('flattens newlines and tabs so a cell cannot escape its row', () => {
     expect(sanitizeForPdf('line one\nline two\tend')).toBe('line one line two end')
+  })
+})
+
+describe('unitLabel', () => {
+  it('spells stored enum slugs the way a client reads them', () => {
+    // The UNIT column printed `lin_ft` while the derivation two lines below
+    // said `lin ft` — one unit, two spellings, underscore facing the client.
+    expect(unitLabel('lin_ft')).toBe('lin ft')
+    expect(unitLabel('sq_ft')).toBe('sq ft')
+  })
+
+  it('leaves units that need no change alone', () => {
+    for (const unit of ['ea', 'sq', 'hour', 'day', 'load']) {
+      expect(unitLabel(unit)).toBe(unit)
+    }
+  })
+
+  it('handles a unit added to the enum later without being extended', () => {
+    // A rule, not a lookup table: the point is that nobody has to remember this
+    // file when the enum grows.
+    expect(unitLabel('board_ft')).toBe('board ft')
   })
 })
 
