@@ -1069,3 +1069,21 @@ generation failure. The POST route behind the button is the one the earlier pass
 AWAITING HUMAN: nothing blocking. C10 adds the client-facing half — a tokenised share link with
 access logging — beside this staff-facing panel; it was deliberately not improvised here, because
 Law 7 wants that access logged and the table for it arrives with C10.
+
+## docs — the "no browser has served a C09 route" line is withdrawn
+
+CLAUDE.md's Outstanding section still said a browser had never served a C09 route and that
+Storage was unexercised. Both were true when written and were made false by the browser pass two
+entries ago, which signed in, issued a revision, generated and downloaded PDFs, and uploaded a
+logo. The section now records what actually remains — the licence/insurance letterhead branch and
+the unclickable Generate button — and carries forward the one thing a future change to
+`lib/pdf.ts` needs to know: a deliberate renderer change makes every existing document report
+`matches=false` from `rehashEstimateDocument()`, which is expected rather than tamper evidence,
+because the authoritative check hashes the stored bytes instead of re-rendering.
+
+Recorded as its own commit for the same reason the migration count was: this repo has three times
+now paid for a sentence in its own instructions that stayed true-looking after it stopped being
+true — C03's bucket claim, which five commits carried forward, the migration count, and this.
+
+VERIFIED: `build` 0, `lint` 0, `typecheck` 0, `test` 13 files / 289 passed with the live suites
+collecting (`NODE_USE_ENV_PROXY=1`).
