@@ -1182,3 +1182,77 @@ turned up none. The disk went from 5.7 GB free to 2.2 GB free during this incide
 7.3 GB free shortly after, with nothing in this session's own work accounting for either swing —
 **the host machine was critically low on disk space during this session, and that is almost
 certainly what caused it. It is a host condition outside this repo and needs a human to look at.**
+
+## C10 follow-up — four bugs and two duplications an 8-angle review found, all fixed
+
+An 8-angle code review of the C10 PR (`git diff origin/main...HEAD`), followed by one independent
+verifier per surviving candidate, confirmed 6 findings and refuted 2. The 2 refutations are worth
+recording because they show what NOT to fix: broadening `pages/api/estimate/[id].ts`'s select to
+include client name/email/phone looked like new PII exposure to non-admin roles, but
+`pages/api/client/[id].ts` and the `client` table's own RLS policy already expose the identical
+data to any company role with no role check at all — the data was never gated, so nothing here
+opened anything. And `pages/api/document/[id]/share.ts`'s GET (access logs, no role restriction)
+looked inconsistent with its own POST (owner/admin only), but `pages/api/company/team.ts` and
+`pages/api/catalog/[id].ts` show "read open to any member, mutate restricted to owner/admin" is
+this codebase's established shape, not something C10 introduced.
+
+THE SIX CONFIRMED FINDINGS, all fixed:
+
+1. **`revokeShareLink()` reported success on a no-op revoke.** `.update().eq('id',...).eq(
+   'company_id',...)` without `.select()` can't distinguish "0 rows matched" from "1 row updated" —
+   Postgres/PostgREST treats a zero-row update as a successful no-op, not an error. A stale,
+   mistyped, cross-company, or already-purged `linkId` returned `{ok: true}`, so staff could
+   believe a link was dead while a client could still open it. Fixed by adding `.select('id')` and
+   checking the row came back; the revoke route now returns 404 for "nothing matched" instead of
+   200.
+2. **The public PDF route never logged anything.** `pages/api/v/[token]/pdf.ts` queried
+   `share_link`/`document` directly and hand-checked `revoked_at`/`expires_at`, instead of going
+   through `recordShareLinkView` — the only function that increments `view_count` and writes a
+   `share_link_access` row. A bookmarked or forwarded link straight to the PDF endpoint (skipping
+   the viewer page) downloaded the full document with zero trace, undercounting the "Client viewed
+   your estimate N times" feature the spec calls out as valuable sales information. Fixed by
+   routing the PDF handler through `recordShareLinkView` for both the status check and the log.
+3. **Once two links were active, the older one had no revoke button anywhere.** `createShareLink`
+   has no uniqueness check — "Generate New Link" while one is already active just inserts a second
+   row — and `SharePanel`'s `activeLink` is the single most-recent match; every other link,
+   including one whose own computed status is "Active," got a status badge and no action in the
+   "Previous Links" list. Fixed by rendering a Revoke button for any link in that list whose status
+   is Active, not only the one the top section tracks.
+4. **The public page's dates could disagree with the PDF of the same document.** Same bug class as
+   C10's own `unitLabel()` fix: `pages/v/[token].tsx` rendered `issuedAt`/`expiresAt` — the exact
+   frozen values the PDF renders via `formatDateStable()` specifically so a document reads
+   identically everywhere — with plain `toLocaleDateString()`, which is locale/ICU-dependent.
+   Switching it to `formatDateStable()` pulled in `lib/pdf.ts`, which imports `pdf-lib`: the fix as
+   first written ballooned this page's build-time bundle from 4.2 KB to 180 KB. `formatDateStable`
+   and its `MONTHS` table were moved to a new dependency-free `lib/dates.ts`, which `lib/pdf.ts` now
+   re-exports from for existing importers; the bundle is back to 4.37 KB. Recorded as its own
+   DECISIONS line because it is the second time this PR's fixes for a genuine bug introduced a
+   regression that only a rebuild caught — see the eslint carve-out's own comment about this page's
+   size being load-bearing for "fast on bad LTE."
+5. **The PDF tamper-evidence check was duplicated nearly verbatim** between
+   `pages/api/v/[token]/pdf.ts` and `pages/api/document/[id].ts` — the same ~25-line download +
+   SHA-256 compare + response-header block, including identical error strings, in both files.
+   Extracted to `loadVerifiedDocumentBytes()` / `sendDocumentPdf()` in `lib/document-server.ts`;
+   both routes now call the one copy, so a future fix to the Law 3/8 tamper check cannot land in
+   one route and miss the other.
+6. **`authHeaders()` was copied, not shared**, between `components/SharePanel.tsx` and
+   `pages/estimates/[id].tsx` — SharePanel's own comment acknowledged copying the estimate page's
+   logic. Moved to `lib/supabase-browser.ts` as `authHeaders()`, imported by both. (It had to be
+   declared with `type`, not `interface` — `BearerHeaders` needs the implicit index signature a
+   type-literal gets and an interface does not, to stay assignable to `fetch`'s `HeadersInit`
+   without a cast; TypeScript only grants that to object type literals.)
+
+VERIFIED, against the live project: `build` 0, `lint` 0, `typecheck` 0, `test` 15 files / 316
+passed — 2 more than the prior entry's 314, both new (`lib/share-db.test.ts`'s "revoke targeting"
+suite: a not-found linkId and a cross-company linkId each report failure rather than a false
+`{ok: true}`). In a browser, signed in as the demo owner against the real `EST-0003`:
+generated a link, confirmed the previously-orphaned active link in "Previous Links" now has a
+working Revoke button and clicking it revokes the right row (200, not a silent no-op); hit
+`/api/v/{token}/pdf` directly with `curl`, with no prior load of `/v/[token]`, and confirmed via
+direct SQL that `view_count` and `share_link_access` both updated; loaded the viewer page and
+confirmed "Issued: November 27, 2026" (not "11/27/2026") against a production build (`next build`
++ `next start`, not dev) that still serves zero `<script>` tags for this page. A background Next
+dev-server process was still holding port 3000 from an earlier verification pass and caused one
+confusing false-negative along the way — `next start` failed with `EADDRINUSE` but exited quietly
+enough that `curl` kept hitting the stale server's old code; killing that process and restarting
+cleanly resolved it, and nothing in the app itself was at fault.

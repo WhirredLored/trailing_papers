@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import type { NextApiResponse } from 'next'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/supabase'
 import type { Enums, Tables } from '@/types/db'
@@ -42,6 +43,64 @@ export const DOCUMENTS_BUCKET = 'documents'
 /** Lowercase hex sha256 — the format the document.sha256 check constraint requires. */
 export function sha256Hex(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex')
+}
+
+export type LoadDocumentBytesResult =
+  | { ok: true; bytes: Uint8Array }
+  | { ok: false; status: number; error: string }
+
+/**
+ * Download a stored document and verify it against its recorded hash (Law 3 / 8).
+ *
+ * This is the one place that performs the tamper-evidence check: the download
+ * route for staff (pages/api/document/[id].ts) and the public token-authorized
+ * route (pages/api/v/[token]/pdf.ts) both call it, so a future change to this
+ * logic cannot land in one route and silently miss the other.
+ */
+export async function loadVerifiedDocumentBytes(
+  db: SupabaseClient<Database>,
+  document: { storage_path: string; sha256: string; number_text: string },
+): Promise<LoadDocumentBytesResult> {
+  const { data: file, error: downloadError } = await db.storage
+    .from(DOCUMENTS_BUCKET)
+    .download(document.storage_path)
+
+  if (downloadError || !file) {
+    return {
+      ok: false,
+      status: 502,
+      error: `Stored document could not be read: ${downloadError?.message ?? 'missing file'}`,
+    }
+  }
+
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  const actual = sha256Hex(bytes)
+  if (actual !== document.sha256) {
+    return {
+      ok: false,
+      status: 409,
+      error:
+        `Stored document ${document.number_text} does not match its recorded hash and was not served. ` +
+        `Expected ${document.sha256}, found ${actual}.`,
+    }
+  }
+
+  return { ok: true, bytes }
+}
+
+/** Write the PDF response headers and body shared by both document download routes. */
+export function sendDocumentPdf(
+  res: NextApiResponse,
+  document: { number_text: string; sha256: string },
+  bytes: Uint8Array,
+  cacheControl: string,
+): void {
+  res.setHeader('Content-Type', 'application/pdf')
+  res.setHeader('Content-Length', String(bytes.length))
+  res.setHeader('Content-Disposition', `inline; filename="${document.number_text}.pdf"`)
+  res.setHeader('Cache-Control', cacheControl)
+  res.setHeader('X-Document-Sha256', document.sha256)
+  res.status(200).send(Buffer.from(bytes))
 }
 
 /**

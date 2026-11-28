@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Head from 'next/head'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
-import { getBrowserClient } from '@/lib/supabase-browser'
+import { authHeaders, getBrowserClient } from '@/lib/supabase-browser'
 import { formatCents, formatCentsPlain, parseCents } from '@/lib/money'
 import { computeTakeoff, type RoundingRule, type TakeoffAssembly } from '@/lib/takeoff'
 import {
@@ -248,25 +248,6 @@ function tryCents(text: string): number | null {
 
 function formatBp(bp: number): string {
   return `${(bp / 100).toFixed(2).replace(/\.00$/, '')}%`
-}
-
-/**
- * Concrete return type rather than HeadersInit: a caller that needs only the
- * Authorization header — the PDF fetch, which must not send a JSON
- * Content-Type — can read it without casting.
- */
-async function authHeaders(): Promise<{
-  Authorization: string
-  'Content-Type': string
-} | null> {
-  const {
-    data: { session },
-  } = await getBrowserClient().auth.getSession()
-  if (!session) return null
-  return {
-    Authorization: `Bearer ${session.access_token}`,
-    'Content-Type': 'application/json',
-  }
 }
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib'
 import { formatCentsStable, type Cents } from '@/lib/money'
+import { formatDateStable } from '@/lib/dates'
 
 /**
  * Deterministic document rendering (C09).
@@ -161,37 +162,10 @@ export interface DocumentModel {
 // Deterministic formatting
 // ---------------------------------------------------------------------------
 
-const MONTHS = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-] as const
-
-/**
- * Format an ISO timestamp as "September 17, 2026", in UTC.
- *
- * UTC rather than a local zone is a deliberate trade: a document rendered in two
- * places must read the same, and `toLocaleDateString` would make the printed date
- * a property of the server's zone and ICU build. The cost is that an estimate
- * issued late evening US-time carries the following UTC date; the frozen
- * `issued_at` remains the authoritative instant either way.
- */
-export function formatDateStable(iso: string): string {
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) {
-    throw new TypeError(`Not a date: ${iso}`)
-  }
-  return `${MONTHS[date.getUTCMonth()]} ${date.getUTCDate()}, ${date.getUTCFullYear()}`
-}
+// Re-exported for existing importers — moved to lib/dates.ts so a page that
+// needs only the date formatter (pages/v/[token].tsx) is not forced to bundle
+// pdf-lib just by importing from this module.
+export { formatDateStable } from '@/lib/dates'
 
 // ---------------------------------------------------------------------------
 // Text measurement and wrapping

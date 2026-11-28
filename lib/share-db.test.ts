@@ -237,6 +237,33 @@ if (!SUPABASE_URL || !SERVICE_KEY) {
     })
   })
 
+  describe('revoke targeting', () => {
+    it('reports failure rather than a false success when the link id does not match', async () => {
+      const result = await revokeShareLink(admin, {
+        companyId: companyAId,
+        linkId: '00000000-0000-0000-0000-000000000000',
+      })
+      expect(result.ok).toBe(false)
+      expect(result.error).toMatch(/not found/i)
+    })
+
+    it('refuses to revoke a link that belongs to a different company', async () => {
+      const { link, rawToken } = await createShareLink(admin, {
+        companyId: companyAId,
+        documentId: documentAId,
+      })
+      createdShareLinkIds.push(link.id)
+
+      const result = await revokeShareLink(admin, { companyId: companyBId, linkId: link.id })
+      expect(result.ok).toBe(false)
+
+      // The link is still genuinely active — a caller trusting {ok: true} would
+      // have believed company B had revoked company A's link.
+      const view = await recordShareLinkView(admin, rawToken)
+      expect(view.status).toBe('active')
+    })
+  })
+
   describe('immutability & guards (Law 8)', () => {
     it('refuses plain DELETE of a share link without purge_share_link', async () => {
       const { error } = await admin.from('share_link').delete().eq('id', shareLinkAId)

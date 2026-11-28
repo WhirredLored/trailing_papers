@@ -7,6 +7,7 @@ import {
   type ShareLinkStatus,
 } from '@/lib/share-server'
 import { formatCents } from '@/lib/money'
+import { formatDateStable } from '@/lib/dates'
 
 /**
  * Public client-facing document viewer (C10).
@@ -196,12 +197,12 @@ export default function ClientDocumentView(props: PageProps) {
             <dl className="share-dates">
               <div>
                 <dt>Issued:</dt>
-                <dd>{new Date(document.issuedAt).toLocaleDateString()}</dd>
+                <dd>{formatDateStable(document.issuedAt)}</dd>
               </div>
               {document.expiresAt && (
                 <div>
                   <dt>Valid Through:</dt>
-                  <dd>{new Date(document.expiresAt).toLocaleDateString()}</dd>
+                  <dd>{formatDateStable(document.expiresAt)}</dd>
                 </div>
               )}
             </dl>

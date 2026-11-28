@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { Tables } from '@/types/db'
-import { getBrowserClient } from '@/lib/supabase-browser'
+import { authHeaders } from '@/lib/supabase-browser'
 
 /**
  * Share an issued document with the client (C10).
@@ -8,23 +8,6 @@ import { getBrowserClient } from '@/lib/supabase-browser'
  * Staff-facing control that generates revocable, tokenized links, provides copy
  * and message shortcuts (email/SMS), and displays client view analytics.
  */
-
-/**
- * The staff API routes authorise on `Authorization: Bearer`, not a cookie (same
- * reasoning as the estimate page's own authHeaders()), so every fetch here needs
- * the current session's access token or the route 401s with "Missing
- * authorization header."
- */
-async function authHeaders(): Promise<{ Authorization: string; 'Content-Type': string } | null> {
-  const {
-    data: { session },
-  } = await getBrowserClient().auth.getSession()
-  if (!session) return null
-  return {
-    Authorization: `Bearer ${session.access_token}`,
-    'Content-Type': 'application/json',
-  }
-}
 
 interface AccessLog {
   id: string
@@ -380,6 +363,16 @@ export default function SharePanel({
                       <span className={`badge-${statusLabel.toLowerCase()}`}>{statusLabel}</span>
                       <span>Created {new Date(l.created_at).toLocaleDateString()}</span>
                       <span>{l.view_count} views</span>
+                      {statusLabel === 'Active' && isOwnerOrAdmin && (
+                        <button
+                          type="button"
+                          className="btn-danger-outline btn-sm"
+                          disabled={revokingId === l.id}
+                          onClick={() => handleRevoke(l.id)}
+                        >
+                          {revokingId === l.id ? 'Revoking…' : 'Revoke'}
+                        </button>
+                      )}
                     </div>
                   </li>
                 )

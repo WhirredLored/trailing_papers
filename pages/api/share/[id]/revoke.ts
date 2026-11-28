@@ -29,7 +29,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   })
 
   if (!result.ok) {
-    return res.status(400).json({ error: result.error ?? 'Could not revoke share link.' })
+    const status = result.error === 'Share link not found.' ? 404 : 400
+    return res.status(status).json({ error: result.error ?? 'Could not revoke share link.' })
   }
 
   return res.status(200).json({ ok: true })

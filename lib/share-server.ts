@@ -90,7 +90,7 @@ export async function revokeShareLink(
 ): Promise<{ ok: boolean; error?: string }> {
   const { companyId, linkId, revokedBy } = params
 
-  const { error } = await db
+  const { data, error } = await db
     .from('share_link')
     .update({
       revoked_at: new Date().toISOString(),
@@ -98,9 +98,17 @@ export async function revokeShareLink(
     })
     .eq('id', linkId)
     .eq('company_id', companyId)
+    .select('id')
 
   if (error) {
     return { ok: false, error: error.message }
+  }
+
+  // A zero-row update is not an error from Postgres's point of view, but a
+  // wrong-company, stale, mistyped, or already-purged linkId would otherwise
+  // report {ok: true} for a revoke that never happened.
+  if (!data || data.length === 0) {
+    return { ok: false, error: 'Share link not found.' }
   }
 
   return { ok: true }
