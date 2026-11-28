@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { getServiceRoleClient } from '@/lib/supabase-server'
 import { requireUser } from '@/lib/auth-server'
 import { routeParam } from '@/lib/api-params'
-import { DOCUMENTS_BUCKET, sha256Hex } from '@/lib/document-server'
+import { loadVerifiedDocumentBytes, sendDocumentPdf } from '@/lib/document-server'
 
 /**
  * Download a stored document, authorized by session (C09 item 5).
@@ -48,38 +48,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (error) return res.status(500).json({ error: error.message })
   if (!document) return res.status(404).json({ error: 'Document not found.' })
 
-  const { data: file, error: downloadError } = await db.storage
-    .from(DOCUMENTS_BUCKET)
-    .download(document.storage_path)
-
-  if (downloadError || !file) {
-    return res.status(502).json({
-      error: `Stored document could not be read: ${downloadError?.message ?? 'missing file'}`,
-    })
-  }
-
-  const bytes = new Uint8Array(await file.arrayBuffer())
-
   // Tamper evidence, checked on the way out (Law 3 / Law 8). If the stored bytes
   // no longer hash to what was recorded at generation, something replaced the
   // file — so refuse to serve it rather than pass off an altered document as the
-  // one that was issued. This is the entire reason the hash is stored.
-  const actual = sha256Hex(bytes)
-  if (actual !== document.sha256) {
-    return res.status(409).json({
-      error:
-        `Stored document ${document.number_text} does not match its recorded hash and was not served. ` +
-        `Expected ${document.sha256}, found ${actual}.`,
-    })
+  // one that was issued. This is the entire reason the hash is stored. Shared
+  // with the public token route (pages/api/v/[token]/pdf.ts) so this check
+  // cannot drift between the two document-serving paths.
+  const result = await loadVerifiedDocumentBytes(db, document)
+  if (!result.ok) {
+    return res.status(result.status).json({ error: result.error })
   }
 
-  res.setHeader('Content-Type', 'application/pdf')
-  res.setHeader('Content-Length', String(bytes.length))
-  res.setHeader('Content-Disposition', `inline; filename="${document.number_text}.pdf"`)
   // A frozen document never changes, so it is safe to cache hard — privately,
   // since it is client data behind a session.
-  res.setHeader('Cache-Control', 'private, max-age=31536000, immutable')
-  res.setHeader('X-Document-Sha256', document.sha256)
-
-  return res.status(200).send(Buffer.from(bytes))
+  sendDocumentPdf(res, document, result.bytes, 'private, max-age=31536000, immutable')
 }

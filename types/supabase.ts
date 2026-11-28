@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.17"
+    PostgrestVersion: "14.18"
   }
   graphql_public: {
     Tables: {
@@ -1044,6 +1044,108 @@ export type Database = {
           },
         ]
       }
+      share_link: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string | null
+          document_id: string
+          expires_at: string
+          id: string
+          last_viewed_at: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+          token_hash: string
+          view_count: number
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          document_id: string
+          expires_at?: string
+          id?: string
+          last_viewed_at?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          token_hash: string
+          view_count?: number
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          document_id?: string
+          expires_at?: string
+          id?: string
+          last_viewed_at?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          token_hash?: string
+          view_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "share_link_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "company"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "share_link_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "document"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      share_link_access: {
+        Row: {
+          company_id: string
+          id: string
+          ip: unknown
+          referer: string | null
+          share_link_id: string
+          user_agent: string | null
+          viewed_at: string
+        }
+        Insert: {
+          company_id: string
+          id?: string
+          ip?: unknown
+          referer?: string | null
+          share_link_id: string
+          user_agent?: string | null
+          viewed_at?: string
+        }
+        Update: {
+          company_id?: string
+          id?: string
+          ip?: unknown
+          referer?: string | null
+          share_link_id?: string
+          user_agent?: string | null
+          viewed_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "share_link_access_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "company"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "share_link_access_share_link_id_fkey"
+            columns: ["share_link_id"]
+            isOneToOne: false
+            referencedRelation: "share_link"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -1106,7 +1208,6 @@ export type Database = {
           isSetofReturn: false
         }
       }
-      dearmor: { Args: { "": string }; Returns: string }
       document_number_text: {
         Args: {
           p_kind: Database["public"]["Enums"]["document_kind"]
@@ -1114,8 +1215,6 @@ export type Database = {
         }
         Returns: string
       }
-      gen_random_uuid: { Args: never; Returns: string }
-      gen_salt: { Args: { "": string }; Returns: string }
       issue_estimate: {
         Args: {
           p_company_id: string
@@ -1171,11 +1270,8 @@ export type Database = {
           isSetofReturn: false
         }
       }
-      pgp_armor_headers: {
-        Args: { "": string }
-        Returns: Record<string, unknown>[]
-      }
       purge_document: { Args: { p_document_id: string }; Returns: number }
+      purge_share_link: { Args: { p_share_link_id: string }; Returns: number }
       record_document: {
         Args: {
           p_actor?: string
@@ -1209,6 +1305,20 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      record_share_link_view: {
+        Args: {
+          p_ip: unknown
+          p_referer: string
+          p_token_hash: string
+          p_user_agent: string
+        }
+        Returns: {
+          company_id: string
+          document_id: string
+          share_link_id: string
+          status: string
+        }[]
       }
       save_estimate_draft: {
         Args: {
