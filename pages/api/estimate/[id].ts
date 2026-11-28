@@ -44,7 +44,7 @@ async function getEstimate(req: NextApiRequest, res: NextApiResponse) {
     // second round trip. Additive, and inert for every existing caller — the
     // same reasoning as C08 adding catalog_item.kind to the assembly select.
     .select(
-      '*, project:project_id ( id, title, property:property_id ( address_line1 ) ),' +
+      '*, project:project_id ( id, title, property:property_id ( address_line1, client:client_id ( name, emails, phones ) ) ),' +
         ' document:pdf_document_id ( id, number_text, generated_at, byte_size )',
     )
     .eq('id', id)
@@ -66,8 +66,15 @@ async function getEstimate(req: NextApiRequest, res: NextApiResponse) {
   const drafts = (lines ?? []).map(rowToDraft)
   const computed = snapshot(drafts, termsOf(estimate as unknown as Tables<'estimate'>))
 
+  const { data: comp } = await db
+    .from('company')
+    .select('name, legal_name')
+    .eq('id', caller.companyId)
+    .single()
+
   return res.status(200).json({
     estimate,
+    company: comp,
     lines: lines ?? [],
     computed: {
       totals: computed.totals.breakdown,

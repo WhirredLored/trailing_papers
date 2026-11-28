@@ -23,6 +23,7 @@ import {
   type TakeoffLineSource,
 } from '@/lib/estimate'
 import MeasurementInput, { type DriverUnit } from '@/components/MeasurementInput'
+import SharePanel from '@/components/SharePanel'
 
 /**
  * Estimate builder.
@@ -64,7 +65,18 @@ type EstimateRow = {
   superseded_by_estimate_id: string | null
   revised_from_estimate_id: string | null
   pdf_document_id: string | null
-  project?: { id: string; title: string; property?: { address_line1: string } | null } | null
+  project?: {
+    id: string
+    title: string
+    property?: {
+      address_line1: string
+      client?: {
+        name: string
+        emails: string[] | null
+        phones: string[] | null
+      } | null
+    } | null
+  } | null
   document?: {
     id: string
     number_text: string
@@ -284,6 +296,17 @@ export default function EstimateBuilderPage() {
   const [termsText, setTermsText] = useState('')
   const [internalNotes, setInternalNotes] = useState('')
 
+  const [companyName, setCompanyName] = useState<string>('Contractor')
+  const [userRole, setUserRole] = useState<string | null>(null)
+
+  useEffect(() => {
+    getBrowserClient()
+      .auth.getSession()
+      .then(({ data: { session } }) => {
+        setUserRole(session?.user?.app_metadata?.role ?? null)
+      })
+  }, [])
+
   const [addPanel, setAddPanel] = useState<'catalog' | 'assembly' | 'free' | null>(null)
   const [preview, setPreview] = useState<DetailLevel>('itemized')
   const [expanded, setExpanded] = useState<string | null>(null)
@@ -308,8 +331,15 @@ export default function EstimateBuilderPage() {
       return
     }
 
-    const body = (await res.json()) as { estimate: EstimateRow; lines: LineRow[] }
+    const body = (await res.json()) as {
+      estimate: EstimateRow
+      lines: LineRow[]
+      company?: { name: string; legal_name: string | null }
+    }
     setEstimate(body.estimate)
+    if (body.company) {
+      setCompanyName(body.company.legal_name || body.company.name)
+    }
     setLines(body.lines.map(rowToState))
     setPricingMode(body.estimate.pricing_mode)
     setPricingBpText(String(body.estimate.pricing_bp / 100))
@@ -1334,6 +1364,18 @@ export default function EstimateBuilderPage() {
                   </>
                 )}
               </div>
+
+              {estimate.document && (
+                <SharePanel
+                  documentId={estimate.document.id}
+                  documentNumber={estimate.document.number_text}
+                  companyName={companyName}
+                  clientName={estimate.project?.property?.client?.name}
+                  clientEmail={estimate.project?.property?.client?.emails?.[0]}
+                  clientPhone={estimate.project?.property?.client?.phones?.[0]}
+                  isOwnerOrAdmin={userRole === 'owner' || userRole === 'admin'}
+                />
+              )}
 
               <button type="button" className="btn-primary" onClick={revise} disabled={saving}>
                 {saving ? 'Working…' : 'Create revision'}

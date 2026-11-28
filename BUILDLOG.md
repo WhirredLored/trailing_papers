@@ -1087,3 +1087,98 @@ true — C03's bucket claim, which five commits carried forward, the migration c
 
 VERIFIED: `build` 0, `lint` 0, `typecheck` 0, `test` 13 files / 289 passed with the live suites
 collecting (`NODE_USE_ENV_PROXY=1`).
+
+## C10 — revocable tokenized client share links, and three bugs a browser pass found
+
+C10's migration, server library, API routes, and the public `/v/[token]` page were already
+written and the migration already applied to the live project when this commit picked the work
+up — `share_link` and `share_link_access` exist with the triggers and `record_share_link_view` /
+`purge_share_link` RPCs the spec asks for, and `types/supabase.ts` already carried them. What
+this commit adds is finishing the staff-facing `SharePanel`, closing three defects a browser pass
+found, and extending the M1 isolation suite to the two new tables.
+
+THE THREE DEFECTS, all found by actually clicking through the feature rather than trusting the
+unit tests, which could not have caught any of them:
+
+1. **`SharePanel` rebuilt share URLs from `token_hash`.** The migration stores only the SHA-256
+   hash — "never store the raw token" is in the spec for a reason — so `/v/${activeLink.token_hash}`
+   can never match any token's hash and was never a working link. On first create this was masked
+   by `newlyCreatedUrl` holding the real one; reload the page, and "Copy Link" / "Email Client" /
+   "SMS Client" all handed out a URL that 404s forever. Fixed by only ever rendering a URL from
+   `newlyCreatedUrl` — the one moment the raw token exists in memory — and giving an active link
+   with no held token its own state: stats, revoke, and a plain explanation that generating a new
+   link is the only way to get a fresh copyable URL. Caught by reading the code against the
+   migration's own comment, not by clicking — the next two were not.
+2. **Every `SharePanel` fetch omitted the `Authorization` header.** The staff API routes
+   authorise on `Authorization: Bearer`, the same as the rest of this app (`requireUser` reads
+   nothing else), and `SharePanel` built its own `fetch()` calls from scratch instead of reusing
+   that pattern. Clicking "Create Share Link" in a real signed-in session produced "Missing
+   authorization header." on screen — the feature could not create a link at all. Fixed with a
+   local `authHeaders()` (same shape as the estimate page's own) wired into all three calls.
+3. **The public page 500'd on every real document.** `getServerSideProps` refuses to serialize
+   `undefined`, and `DocumentModel.totals[].emphasis` is `?: boolean` — absent, not `false`, on
+   every non-emphasized row. `resolveShareLink()` passed it through unchanged. Separately, line
+   units reached the client page as the raw enum slug (`lin_ft`) because `unitLabel()` — written
+   in C09 specifically so a client never sees the same unit spelled two ways on one document — is
+   applied only inside the PDF renderer, and this page is a second renderer of the same
+   `DocumentModel` that never called it. Both only show up by opening the page a real document
+   produces, which is what a browser pass is for.
+
+ALSO DONE: `lib/isolation.test.ts` — the M1 tenancy gate, which CLAUDE.md is explicit is "not
+optional" — did not cover `document`, `share_link`, or `share_link_access`, although the file's
+own header names itself the template every new table follows. Seeded both tenants with a document
+and a share link each (document's `related_id` carries no FK, so no issued estimate is needed, the
+same shortcut `share-db.test.ts` already takes), added 12 cross-tenant assertions across the three
+tables, and taught the suite's teardown to purge the link and document before the estimate/project
+chain deletes, since both refuse a plain DELETE (Law 8) and `share_link` references `document` on
+delete restrict.
+
+VERIFIED, against the live project (`Trailing_papers`, `NODE_USE_ENV_PROXY=1`):
+
+- `build` 0, `lint` 0, `typecheck` 0, `test` 15 files / 314 passed — `lib/isolation.test.ts` now
+  36 tests (was 24), `lib/share-server.test.ts` 7, `lib/share-db.test.ts` 9.
+- **In a browser**, signed in as the seeded demo owner, against the real issued `EST-0003`:
+  generated a link, confirmed the URL in "Email Client" / "SMS Client" was the real raw-token
+  link (not the `token_hash` bug), opened it in a second tab, hit the 500, fixed defect 3, reloaded
+  and got a correctly rendered document with `lin ft` (not `lin_ft`) in the unit column. Inspected
+  the embedded `__NEXT_DATA__` JSON directly and grepped it for every forbidden substring in
+  `assertNoInternalCostLeaks` — none present. Reloaded the staff page with no link held in memory
+  and confirmed the new "can't be displayed again, generate a new one" state (not a broken URL).
+  Revoked the link (confirming the fetch now carries its auth header — the route returned 200, not
+  401) and confirmed the public page switched to the polite "no longer active, contact the
+  contractor" state with the real company phone/email, not a crash.
+- **In production mode** (`next build` + `next start`, not dev — dev mode's HMR scripts would have
+  hidden this): fetched `/v/[token]` with `curl` and confirmed zero `<script>` tags in the
+  response. The spec's "no app chrome, loads fast on bad LTE" requirement — and the page's own
+  comment claiming `unstable_runtimeJS: false` ships no client JS — holds in the mode that matters
+  and was previously unverified.
+- The live project was left as found: 2 companies, 3 documents, 3 estimates, 1 client — the
+  isolation and share-db suites' own fixtures purge cleanly. The demo tenant now carries a few
+  extra revoked share links and view-count increments from this verification pass, same as the
+  one pre-existing revoked link already on `EST-0003` before this session started (an earlier,
+  unrecorded manual pass — its access log shows a real mobile Safari user agent, not a fixture).
+
+NOT VERIFIED: real device field use (a phone on actual LTE, not an emulated viewport), email/SMS
+deliverability (`mailto:`/`sms:` links hand off to the OS, which this harness cannot drive), and
+whether an actual client clicking a link in a real email client renders identically to `curl` and
+the browser pane.
+
+INCIDENT, recorded because it is the reason `styles/globals.css`'s share-page CSS in this commit
+is new rather than the original: partway through this session, with the host machine's `C:` drive
+at 97-100% full, seven files in this working tree were corrupted in the same second (22:58:29–30) —
+four new files truncated to 0 bytes (`pages/api/document/[id]/share.ts`, `pages/api/share/[id]/
+revoke.ts`, `pages/api/v/[token]/pdf.ts`, and this commit's own migration file) and three modified
+files silently reverted to their last-committed HEAD content (`pages/api/estimate/[id].ts`,
+`pages/estimates/[id].tsx`, `styles/globals.css`). No command this session ran writes to any of
+those paths. The four truncated files and the two reverted TypeScript files were restored exactly,
+from this session's own earlier full reads of them (diffed byte-for-byte against those reads
+afterward to confirm). `styles/globals.css`'s ~570 lines of share-page CSS could not be recovered
+the same way — only its diffstat had been read, never its content — so the styling in this commit
+is freshly written to match the class names `SharePanel.tsx` and `pages/v/[token].tsx` already use
+and the rest of the app's existing design tokens, not a restoration of whatever was there before.
+Functionally this changes nothing verification already covered; visually, anyone who saw the panel
+before this incident may notice it looks different. A full repo sweep for other zero-byte files
+turned up none. The disk went from 5.7 GB free to 2.2 GB free during this incident and back to
+7.3 GB free shortly after, with nothing in this session's own work accounting for either swing —
+**the host machine was critically low on disk space during this session, and that is almost
+certainly what caused it. It is a host condition outside this repo and needs a human to look at.**

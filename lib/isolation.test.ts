@@ -22,6 +22,7 @@
  *   4. Assert A's client sees only A's rows; B's client sees nothing of A's (and vice versa).
  */
 
+import { randomBytes } from 'node:crypto'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/supabase'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -49,6 +50,10 @@ if (!SUPABASE_URL || !ANON_KEY || !SERVICE_KEY) {
   let companyBId: string
   let userAId: string
   let userBId: string
+  let documentAId: string
+  let documentBId: string
+  let shareLinkAId: string
+  let shareLinkBId: string
   const EMAIL_A = `test-isolation-a-${Date.now()}@papertrail.test`
   const EMAIL_B = `test-isolation-b-${Date.now()}@papertrail.test`
   const PASSWORD = 'Test1234!'
@@ -177,6 +182,56 @@ if (!SUPABASE_URL || !ANON_KEY || !SERVICE_KEY) {
         created_by: userId,
       })
       expect(elErr, `${label} estimate_line insert: ${elErr?.message}`).toBeNull()
+
+      // C09/C10. related_id carries no FK (see the migration's own comment), so a
+      // document row needs no issued estimate behind it — this suite only proves
+      // RLS, not the generation path, which is covered elsewhere.
+      const docNumber = `ISO-${label}-${Date.now().toString().slice(-6)}`
+      const { data: doc, error: docErr } = await admin
+        .from('document')
+        .insert({
+          company_id: companyId,
+          kind: 'estimate',
+          related_id: est!.id,
+          version: 1,
+          number: 900000 + (label === 'A' ? 1 : 2),
+          number_text: docNumber,
+          storage_path: `${companyId}/estimate/${docNumber}-v1.pdf`,
+          sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+          byte_size: 1024,
+          generated_by: userId,
+        })
+        .select('id')
+        .single()
+      expect(docErr, `${label} document insert: ${docErr?.message}`).toBeNull()
+
+      const { data: link, error: linkErr } = await admin
+        .from('share_link')
+        .insert({
+          company_id: companyId,
+          document_id: doc!.id,
+          token_hash: randomBytes(32).toString('hex'),
+          created_by: userId,
+        })
+        .select('id')
+        .single()
+      expect(linkErr, `${label} share_link insert: ${linkErr?.message}`).toBeNull()
+
+      const { error: accessErr } = await admin.from('share_link_access').insert({
+        company_id: companyId,
+        share_link_id: link!.id,
+        ip: label === 'A' ? '203.0.113.10' : '203.0.113.20',
+        user_agent: `Isolation ${label} UA`,
+      })
+      expect(accessErr, `${label} share_link_access insert: ${accessErr?.message}`).toBeNull()
+
+      if (label === 'A') {
+        documentAId = doc!.id
+        shareLinkAId = link!.id
+      } else {
+        documentBId = doc!.id
+        shareLinkBId = link!.id
+      }
     }
 
     await seedCompany(companyAId, userAId, 'A')
@@ -199,6 +254,17 @@ if (!SUPABASE_URL || !ANON_KEY || !SERVICE_KEY) {
   })
 
   afterAll(async () => {
+    // share_link_access and document are both evidence (Law 8) and refuse a
+    // plain DELETE; purge_share_link tears down the access log with the link,
+    // and purge_document must run after it since share_link references
+    // document on delete restrict.
+    for (const shareLinkId of [shareLinkAId, shareLinkBId]) {
+      if (shareLinkId) await admin.rpc('purge_share_link', { p_share_link_id: shareLinkId })
+    }
+    for (const documentId of [documentAId, documentBId]) {
+      if (documentId) await admin.rpc('purge_document', { p_document_id: documentId })
+    }
+
     // Delete in FK order. company_id references are `on delete restrict`, and
     // created_by references auth.users, so domain rows must go before the users
     // and companies or both deletes fail silently and leak test data.
@@ -443,6 +509,80 @@ if (!SUPABASE_URL || !ANON_KEY || !SERVICE_KEY) {
         .from('catalog_item')
         .select('*')
         .eq('company_id', companyAId)
+      expect(error).toBeNull()
+      expect(data).toHaveLength(0)
+    })
+  })
+
+  // ─── C09: document table ───────────────────────────────────────────────────
+  describe('document table — cross-tenant isolation', () => {
+    it('user A can read company A', async () => {
+      const { data, error } = await clientA.from('document').select('*').eq('id', documentAId)
+      expect(error).toBeNull()
+      expect(data).toHaveLength(1)
+    })
+
+    it('user A cannot read company B', async () => {
+      const { data, error } = await clientA.from('document').select('*').eq('id', documentBId)
+      expect(error).toBeNull()
+      expect(data).toHaveLength(0)
+    })
+
+    it('user B cannot read company A', async () => {
+      const { data, error } = await clientB.from('document').select('*').eq('id', documentAId)
+      expect(error).toBeNull()
+      expect(data).toHaveLength(0)
+    })
+  })
+
+  // ─── C10: share_link table ─────────────────────────────────────────────────
+  describe('share_link table — cross-tenant isolation', () => {
+    it('user A can read company A', async () => {
+      const { data, error } = await clientA.from('share_link').select('*').eq('id', shareLinkAId)
+      expect(error).toBeNull()
+      expect(data).toHaveLength(1)
+      expect(data?.[0]?.company_id).toBe(companyAId)
+    })
+
+    it('user A cannot read company B', async () => {
+      const { data, error } = await clientA.from('share_link').select('*').eq('id', shareLinkBId)
+      expect(error).toBeNull()
+      expect(data).toHaveLength(0)
+    })
+
+    it('user B cannot read company A', async () => {
+      const { data, error } = await clientB.from('share_link').select('*').eq('id', shareLinkAId)
+      expect(error).toBeNull()
+      expect(data).toHaveLength(0)
+    })
+  })
+
+  // ─── C10: share_link_access table ──────────────────────────────────────────
+  describe('share_link_access table — cross-tenant isolation', () => {
+    it('user A can read company A access log', async () => {
+      const { data, error } = await clientA
+        .from('share_link_access')
+        .select('*')
+        .eq('share_link_id', shareLinkAId)
+      expect(error).toBeNull()
+      expect(data?.length).toBeGreaterThan(0)
+      data!.forEach((row) => expect(row.company_id).toBe(companyAId))
+    })
+
+    it('user A cannot read company B access log', async () => {
+      const { data, error } = await clientA
+        .from('share_link_access')
+        .select('*')
+        .eq('share_link_id', shareLinkBId)
+      expect(error).toBeNull()
+      expect(data).toHaveLength(0)
+    })
+
+    it('user B cannot read company A access log', async () => {
+      const { data, error } = await clientB
+        .from('share_link_access')
+        .select('*')
+        .eq('share_link_id', shareLinkAId)
       expect(error).toBeNull()
       expect(data).toHaveLength(0)
     })

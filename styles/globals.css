@@ -1174,3 +1174,596 @@ html {
   gap: 0.5rem;
   margin-bottom: 0.5rem;
 }
+
+/* ─── Staff share panel (C10) ────────────────────────────────────────────── */
+
+.share-panel {
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.share-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.share-panel-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.share-view-pill {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #1e40af;
+  background: #dbeafe;
+  border-radius: 999px;
+  padding: 0.2rem 0.6rem;
+}
+
+.share-panel-error {
+  font-size: 0.85rem;
+  color: #dc2626;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 0.375rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.share-active-box,
+.share-create-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.share-status-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.share-expires-text {
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.share-link-input-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.share-url-input {
+  flex: 1;
+  min-width: 14rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.375rem;
+  font-size: 0.85rem;
+  color: #334155;
+  background: #fff;
+}
+
+.share-action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.share-btn-link {
+  text-decoration: none;
+}
+
+.share-create-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.share-label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #334155;
+}
+
+.share-stats-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  font-size: 0.85rem;
+  color: #475569;
+}
+
+.share-log-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-height: 10rem;
+  overflow-y: auto;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 0.5rem;
+}
+
+.share-log-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.78rem;
+  color: #64748b;
+}
+
+.share-log-time {
+  color: #334155;
+}
+
+.share-history-section {
+  border-top: 1px solid #e2e8f0;
+  padding-top: 0.5rem;
+}
+
+.share-history-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.share-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.share-history-item {
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.share-history-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.badge-active {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #166534;
+  background: #dcfce7;
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+}
+
+.badge-revoked {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #991b1b;
+  background: #fee2e2;
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+}
+
+.badge-expired {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #92400e;
+  background: #fef3c7;
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+}
+
+/* ─── Public client document view (C10) ──────────────────────────────────── */
+/* Mobile-first: this is read on a phone on a jobsite, not at a desk. */
+
+.share-view-wrapper {
+  min-height: 100dvh;
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.share-top-bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.share-top-bar-inner {
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: 0.75rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.share-top-contractor {
+  font-weight: 600;
+  font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.btn-download-pdf {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.9rem;
+  background: #4f46e5;
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border-radius: 0.375rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.share-document-sheet {
+  max-width: 48rem;
+  margin: 0 auto;
+  background: #ffffff;
+  padding: 1.25rem 1rem 2rem;
+}
+
+@media (min-width: 40rem) {
+  .share-document-sheet {
+    margin-top: 1.5rem;
+    margin-bottom: 1.5rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    padding: 2rem 2.5rem 2.5rem;
+  }
+}
+
+.share-header-grid {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 1rem;
+}
+
+@media (min-width: 36rem) {
+  .share-header-grid {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+}
+
+.share-company-name {
+  margin: 0 0 0.2rem;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.share-dba {
+  margin: 0 0 0.4rem;
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.share-address-block,
+.share-company-contact,
+.share-credentials {
+  font-size: 0.85rem;
+  color: #475569;
+  line-height: 1.5;
+}
+
+.share-company-contact a,
+.share-credentials a {
+  color: #4f46e5;
+}
+
+.share-credentials {
+  margin-top: 0.4rem;
+}
+
+.share-meta-box {
+  text-align: left;
+}
+
+@media (min-width: 36rem) {
+  .share-meta-box {
+    text-align: right;
+  }
+}
+
+.share-doc-badge {
+  display: inline-block;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #4f46e5;
+  background: #eef2ff;
+  border-radius: 999px;
+  padding: 0.2rem 0.6rem;
+  margin-bottom: 0.3rem;
+}
+
+.share-doc-num {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.share-project-title {
+  margin-top: 0.3rem;
+  font-size: 0.85rem;
+  color: #334155;
+}
+
+.share-dates {
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.share-dates div {
+  display: flex;
+  gap: 0.4rem;
+}
+
+@media (min-width: 36rem) {
+  .share-dates div {
+    justify-content: flex-end;
+  }
+}
+
+.share-dates dt,
+.share-dates dd {
+  margin: 0;
+}
+
+.share-divider {
+  border: none;
+  border-top: 1px solid #e2e8f0;
+  margin: 1.25rem 0;
+}
+
+.share-parties-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+@media (min-width: 36rem) {
+  .share-parties-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.share-party-card h3 {
+  margin: 0 0 0.3rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #64748b;
+}
+
+.share-party-card p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #334155;
+  line-height: 1.5;
+}
+
+.share-items-section {
+  margin-bottom: 1.5rem;
+}
+
+.share-table-wrapper {
+  overflow-x: auto;
+}
+
+.share-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.share-table th {
+  text-align: left;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: #64748b;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 0.5rem 0.4rem;
+  white-space: nowrap;
+}
+
+.share-table td {
+  padding: 0.6rem 0.4rem;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: top;
+}
+
+.share-table .text-right {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.share-line-desc {
+  font-weight: 500;
+  color: #0f172a;
+}
+
+.share-badge-opt {
+  margin-left: 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #92400e;
+  background: #fef3c7;
+  border-radius: 999px;
+  padding: 0.1rem 0.45rem;
+  white-space: nowrap;
+}
+
+.share-line-deriv {
+  margin-top: 0.2rem;
+  font-size: 0.78rem;
+  color: #94a3b8;
+}
+
+.share-line-group {
+  margin-top: 0.2rem;
+  font-size: 0.72rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.row-optional td {
+  color: #92400e;
+}
+
+.share-optional-note {
+  font-weight: 400;
+  color: #92400e;
+}
+
+.share-totals-section {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 1.5rem;
+}
+
+.share-totals-list {
+  width: 100%;
+  max-width: 20rem;
+  margin: 0;
+}
+
+.share-totals-list > div {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.3rem 0;
+  font-size: 0.88rem;
+  color: #334155;
+}
+
+.share-totals-list dt,
+.share-totals-list dd {
+  margin: 0;
+}
+
+.share-total-emphasis {
+  border-top: 1px solid #e2e8f0;
+  font-weight: 700;
+  font-size: 1rem;
+  color: #0f172a;
+}
+
+.share-notes-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.share-note-block h3,
+.share-terms-block h3 {
+  margin: 0 0 0.3rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #64748b;
+}
+
+.share-note-block p,
+.share-terms-block p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #475569;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.share-footer {
+  border-top: 1px solid #e2e8f0;
+  padding-top: 1rem;
+  font-size: 0.82rem;
+  color: #64748b;
+}
+
+.share-footer a {
+  color: #4f46e5;
+}
+
+/* ─── Inactive link page (C10) ───────────────────────────────────────────── */
+
+.share-inactive-card {
+  max-width: 26rem;
+  margin: 3rem auto;
+  padding: 2rem 1.5rem;
+  text-align: center;
+}
+
+.share-inactive-icon {
+  color: #94a3b8;
+  margin-bottom: 1rem;
+}
+
+.share-inactive-card h1 {
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin: 0 0 0.75rem;
+}
+
+.share-inactive-msg {
+  font-size: 0.9rem;
+  color: #475569;
+  line-height: 1.5;
+  margin: 0 0 1.5rem;
+}
+
+.share-contact-box {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  text-align: left;
+}
+
+.share-contact-box h2 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.share-contact-box p {
+  margin: 0.25rem 0;
+  font-size: 0.85rem;
+  color: #334155;
+}
+
+.share-contact-box a {
+  color: #4f46e5;
+}
